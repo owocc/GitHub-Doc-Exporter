@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub Doc Exporter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    typography: ({ theme }) => ({
+                        DEFAULT: {
+                            css: {
+                                code: {
+                                    backgroundColor: theme('colors.gray.800'),
+                                    color: theme('colors.gray.200'),
+                                    padding: '0.2em 0.4em',
+                                    borderRadius: '0.25rem',
+                                },
+                                'code::before': {
+                                    content: '""',
+                                },
+                                'code::after': {
+                                    content: '""',
+                                },
+                                pre: {
+                                    backgroundColor: theme('colors.gray.800'),
+                                    color: theme('colors.gray.200'),
+                                },
+                            },
+                        },
+                    }),
+                }
+            },
+            plugins: [
+                require('@tailwindcss/typography'),
+            ],
+        }
+    </script>
+     <script src="https://cdn.tailwindcss.com/3.4.1?plugins=typography"></script>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/"
+  }
+}
+</script>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans">
+    <div id="root"></div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

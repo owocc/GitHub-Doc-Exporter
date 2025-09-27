@@ -1,0 +1,5 @@
+{
+  "name": "GitHub Doc Exporter",
+  "description": "A tool to fetch, view, and export Markdown documentation from a GitHub repository. Users can merge documents into a single file or a zip archive.",
+  "requestFramePermissions": []
+}
