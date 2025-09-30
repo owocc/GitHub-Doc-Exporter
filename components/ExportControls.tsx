@@ -1,75 +1,69 @@
-import React, { useState } from 'react';
-import { DocContent } from '../types';
-
-declare var JSZip: any;
+import React from 'react';
 
 interface ExportControlsProps {
-  documents: DocContent[];
+  exportType: 'all' | 'zip';
+  setExportType: (type: 'all' | 'zip') => void;
+  fetchSubdirectories: boolean;
+  setFetchSubdirectories: (value: boolean) => void;
+  maxDepth: number;
+  setMaxDepth: (value: number) => void;
 }
 
-const ExportControls: React.FC<ExportControlsProps> = ({ documents }) => {
-  const [exportType, setExportType] = useState<'all' | 'range'>('all');
-  const [rangeSize, setRangeSize] = useState<number>(50);
-  const [isExporting, setIsExporting] = useState<boolean>(false);
-
-  const downloadFile = (filename: string, content: string | Blob, mimeType: string) => {
-    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const createMergedContent = (docs: DocContent[]): string => {
-    return docs
-      .map(doc => `[Source: ${doc.url}]\n\n${doc.content}`)
-      .join('\n\n---\n\n');
-  };
-
-  const handleDownload = async () => {
-    if (documents.length === 0) return;
-    setIsExporting(true);
-    try {
-        if (exportType === 'all') {
-            const mergedContent = createMergedContent(documents);
-            downloadFile('docs-all.md', mergedContent, 'text/markdown;charset=utf-8');
-        } else {
-            if (typeof JSZip === 'undefined') {
-                alert('JSZip library is not loaded. Cannot create zip file.');
-                return;
-            }
-            const zip = new JSZip();
-            const numChunks = Math.ceil(documents.length / rangeSize);
-
-            for (let i = 0; i < numChunks; i++) {
-                const start = i * rangeSize;
-                const end = start + rangeSize;
-                const chunk = documents.slice(start, end);
-                const mergedContent = createMergedContent(chunk);
-                const filename = `docs_${start + 1}-${Math.min(end, documents.length)}.md`;
-                zip.file(filename, mergedContent);
-            }
-
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            downloadFile('docs.zip', zipBlob, 'application/zip');
-        }
-    } catch(error) {
-        console.error("Export failed:", error);
-        alert("An error occurred during export. Please check the console for details.");
-    } finally {
-        setIsExporting(false);
-    }
-  };
-
+const ExportControls: React.FC<ExportControlsProps> = ({
+  exportType,
+  setExportType,
+  fetchSubdirectories,
+  setFetchSubdirectories,
+  maxDepth,
+  setMaxDepth,
+}) => {
   return (
     <div>
-      <h3 className="text-lg font-bold mb-4 text-on-surface">Export Options</h3>
-      <div className="space-y-4">
-        <div>
+      <div>
+        <h3 className="text-md font-bold mb-3 text-on-surface">Fetch Options</h3>
+        <label className="flex items-center cursor-pointer justify-between">
+          <span className="text-sm font-medium text-on-surface">
+            Fetch from subdirectories
+          </span>
+          <div className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={fetchSubdirectories} onChange={e => setFetchSubdirectories(e.target.checked)} className="sr-only peer" />
+            <div className="w-11 h-6 bg-surface-variant peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+          </div>
+        </label>
+        <div className="pl-4 mt-2 flex items-center gap-2">
+          <label htmlFor="max-depth-input" className="text-sm text-on-surface-variant">Max depth:</label>
+          <input
+            id="max-depth-input"
+            type="number"
+            value={maxDepth}
+            onChange={(e) => setMaxDepth(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            disabled={!fetchSubdirectories}
+            className="w-20 bg-surface-variant border border-outline text-on-surface-variant rounded-lg py-1 px-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm disabled:opacity-50"
+          />
+        </div>
+      </div>
+
+      <hr className="border-outline/30 my-4" />
+
+      <div>
+        <h3 className="text-md font-bold mb-3 text-on-surface">Export Options</h3>
+        <div className="space-y-3">
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="exportType"
+              value="zip"
+              checked={exportType === 'zip'}
+              onChange={() => setExportType('zip')}
+              className="peer sr-only"
+            />
+            <div className="w-5 h-5 border-2 border-outline rounded-full mr-3 flex items-center justify-center peer-checked:border-primary">
+              <div className="w-2.5 h-2.5 rounded-full bg-primary scale-0 peer-checked:scale-100 transition-transform"></div>
+            </div>
+            <span className="text-sm font-medium text-on-surface">
+              Zip archive (preserves folders)
+            </span>
+          </label>
           <label className="flex items-center cursor-pointer">
             <input
               type="radio"
@@ -83,47 +77,10 @@ const ExportControls: React.FC<ExportControlsProps> = ({ documents }) => {
               <div className="w-2.5 h-2.5 rounded-full bg-primary scale-0 peer-checked:scale-100 transition-transform"></div>
             </div>
             <span className="text-sm font-medium text-on-surface">
-              Merge all documents into a single .md file
+              Merge into a single .md file
             </span>
           </label>
         </div>
-        <div>
-          <label className="flex items-center cursor-pointer">
-            <input
-              type="radio"
-              name="exportType"
-              value="range"
-              checked={exportType === 'range'}
-              onChange={() => setExportType('range')}
-              className="peer sr-only"
-            />
-            <div className="w-5 h-5 border-2 border-outline rounded-full mr-3 flex items-center justify-center peer-checked:border-primary">
-                <div className="w-2.5 h-2.5 rounded-full bg-primary scale-0 peer-checked:scale-100 transition-transform"></div>
-            </div>
-            <span className="text-sm font-medium text-on-surface">
-              Group into files of
-            </span>
-          </label>
-           <div className="pl-8 mt-2 flex items-center gap-2">
-             <input
-                type="number"
-                value={rangeSize}
-                onChange={(e) => setRangeSize(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                disabled={exportType !== 'range'}
-                className="w-24 bg-surface-variant border border-outline text-on-surface-variant rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm disabled:opacity-50"
-             />
-             <span className="text-sm text-on-surface-variant">docs per .md file (creates a .zip)</span>
-           </div>
-        </div>
-      </div>
-      <div className="mt-6">
-        <button
-          onClick={handleDownload}
-          disabled={isExporting || documents.length === 0}
-          className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-semibold rounded-full shadow-sm text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isExporting ? 'Exporting...' : 'Download'}
-        </button>
       </div>
     </div>
   );

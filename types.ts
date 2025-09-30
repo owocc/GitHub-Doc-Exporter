@@ -9,6 +9,7 @@ export interface GitHubFile {
 
 export interface DocContent {
   name: string;
+  path: string;
   content: string;
   url: string;
 }

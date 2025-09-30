@@ -4,6 +4,8 @@ import { fetchRepoDocs, getUser } from './services/githubService';
 import DocumentViewerModal from './components/AccordionItem';
 import ExportControls from './components/ExportControls';
 
+declare var JSZip: any;
+
 // --- NEW TYPES ---
 interface StoredToken {
   token: string;
@@ -11,6 +13,13 @@ interface StoredToken {
 }
 
 // --- NEW ICONS ---
+const DownloadIcon: React.FC<{className?: string}> = ({className}) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+    <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
+    <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+  </svg>
+);
+
 const TrashIcon: React.FC<{className?: string}> = ({className}) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
       <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.046A12.705 12.705 0 0 1 4.25 6.75v8.5A2.75 2.75 0 0 0 7 18h6a2.75 2.75 0 0 0 2.75-2.75v-8.5a12.705 12.705 0 0 1 .237-1.654l.15-.046a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
@@ -88,6 +97,25 @@ const App: React.FC = () => {
   const [isVerifyingToken, setIsVerifyingToken] = useState(false);
   
   const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'light');
+
+  // State for fetch/export settings with localStorage persistence
+  const [fetchSubdirectories, setFetchSubdirectories] = useState<boolean>(() => {
+    const saved = localStorage.getItem('fetchSubdirectories');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [maxDepth, setMaxDepth] = useState<number>(() => {
+    const saved = localStorage.getItem('maxDepth');
+    return saved !== null ? JSON.parse(saved) : 2;
+  });
+  const [exportType, setExportType] = useState<'all' | 'zip'>(() => {
+    const saved = localStorage.getItem('exportType');
+    return saved === 'all' || saved === 'zip' ? saved : 'zip';
+  });
+
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // New state for document selection
+  const [selectedDocPaths, setSelectedDocPaths] = useState<Set<string>>(new Set());
   
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -96,6 +124,16 @@ const App: React.FC = () => {
     if (!activeToken) return null;
     return savedTokens.find(st => st.token === activeToken)?.user || null;
   }, [activeToken, savedTokens]);
+  
+  const repoName = useMemo(() => {
+    const match = repoUrl.match(/github\.com\/[^/]+\/([^/]+)/);
+    return match ? match[1] : 'repository';
+  }, [repoUrl]);
+  
+  const selectedDocuments = useMemo(() => {
+    if (selectedDocPaths.size === 0) return [];
+    return documents.filter(doc => selectedDocPaths.has(doc.path));
+  }, [documents, selectedDocPaths]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -156,6 +194,17 @@ const App: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isSettingsPanelOpen]);
+  
+  // Persist export settings to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('fetchSubdirectories', JSON.stringify(fetchSubdirectories));
+      localStorage.setItem('maxDepth', JSON.stringify(maxDepth));
+      localStorage.setItem('exportType', exportType);
+    } catch (error) {
+      console.error("Failed to save settings to localStorage:", error);
+    }
+  }, [fetchSubdirectories, maxDepth, exportType]);
 
 
   const handleAddToken = async () => {
@@ -181,8 +230,6 @@ const App: React.FC = () => {
         localStorage.setItem('active_github_token', tokenInput);
         
         setTokenInput('');
-        // Optional: close modal on success
-        // setIsTokenManagerOpen(false);
     } catch (e: any) {
         setTokenError(e.message || "An unknown error occurred.");
     } finally {
@@ -205,7 +252,6 @@ const App: React.FC = () => {
     localStorage.setItem('github_tokens', JSON.stringify(newSavedTokens));
     
     if (activeToken === tokenToDelete) {
-        // If the active token was deleted, deactivate it
         setActiveToken(null);
         localStorage.removeItem('active_github_token');
     }
@@ -226,21 +272,98 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setDocuments([]);
+    setSelectedDocPaths(new Set());
 
     try {
-      const docs = await fetchRepoDocs(repoUrl, activeToken);
+      const depthToFetch = fetchSubdirectories ? maxDepth : 1;
+      const docs = await fetchRepoDocs(repoUrl, activeToken, depthToFetch);
       setDocuments(docs);
     } catch (e: any) {
       setError(e.message || 'An unknown error occurred.');
     } finally {
       setIsLoading(false);
     }
-  }, [repoUrl, activeToken]);
+  }, [repoUrl, activeToken, fetchSubdirectories, maxDepth]);
+
+  const handleDownload = async () => {
+    if (selectedDocuments.length === 0) return;
+    setIsExporting(true);
+
+    const downloadFile = (filename: string, content: string | Blob, mimeType: string) => {
+      const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
+    const createMergedContent = (docs: DocContent[]): string => {
+      return docs
+        .map(doc => `[Source: ${doc.url}]\n\n${doc.content}`)
+        .join('\n\n---\n\n');
+    };
+
+    try {
+        if (exportType === 'all') {
+            const mergedContent = createMergedContent(selectedDocuments);
+            downloadFile(`${repoName}-docs.md`, mergedContent, 'text/markdown;charset=utf-8');
+        } else { // 'zip'
+            if (typeof JSZip === 'undefined') {
+                alert('JSZip library is not loaded. Cannot create zip file.');
+                setIsExporting(false);
+                return;
+            }
+            const zip = new JSZip();
+            const rootFolder = zip.folder(repoName);
+            if (!rootFolder) {
+                throw new Error("Could not create root folder in zip.");
+            }
+
+            for(const doc of selectedDocuments) {
+                const fileContent = `[Source: ${doc.url}]\n\n${doc.content}`;
+                rootFolder.file(doc.path, fileContent);
+            }
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            downloadFile(`${repoName}-docs.zip`, zipBlob, 'application/zip');
+        }
+    } catch(error) {
+        console.error("Export failed:", error);
+        alert("An error occurred during export. Please check the console for details.");
+    } finally {
+        setIsExporting(false);
+    }
+  };
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+        const allPaths = new Set(documents.map(d => d.path));
+        setSelectedDocPaths(allPaths);
+    } else {
+        setSelectedDocPaths(new Set());
+    }
+  };
+
+  const handleSelectDoc = (path: string, isSelected: boolean) => {
+    setSelectedDocPaths(prev => {
+        const newSet = new Set(prev);
+        if (isSelected) {
+            newSet.add(path);
+        } else {
+            newSet.delete(path);
+        }
+        return newSet;
+    });
+  };
   
   const handleClear = () => {
     setRepoUrl('');
     setDocuments([]);
     setError(null);
+    setSelectedDocPaths(new Set());
   };
 
   const TokenManagerModal = () => (
@@ -400,14 +523,17 @@ const App: React.FC = () => {
                                     </button>
                                 )}
                             </div>
-                             {documents.length > 0 && (
-                                <>
-                                    <hr className="border-outline/30" />
-                                    <div className="p-4">
-                                        <ExportControls documents={documents} />
-                                    </div>
-                                </>
-                             )}
+                            <hr className="border-outline/30" />
+                            <div className="p-4">
+                                <ExportControls
+                                    exportType={exportType}
+                                    setExportType={setExportType}
+                                    fetchSubdirectories={fetchSubdirectories}
+                                    setFetchSubdirectories={setFetchSubdirectories}
+                                    maxDepth={maxDepth}
+                                    setMaxDepth={setMaxDepth}
+                                />
+                            </div>
                         </div>
                      )}
                 </div>
@@ -454,27 +580,57 @@ const App: React.FC = () => {
 
           {documents.length > 0 && (
             <div className="mt-8 bg-surface rounded-3xl border border-outline/30 overflow-hidden">
-              <div className="p-6 border-b border-outline/30">
-                  <h2 className="text-xl font-bold text-on-surface">
-                    Found {documents.length} Documents
-                  </h2>
+              <div className="p-4 sm:p-6 border-b border-outline/30 flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                      <input
+                          type="checkbox"
+                          id="select-all-checkbox"
+                          aria-label="Select all documents"
+                          checked={documents.length > 0 && selectedDocPaths.size === documents.length}
+                          onChange={handleSelectAll}
+                          className="h-5 w-5 rounded border-outline text-primary focus:ring-primary accent-primary bg-surface-variant"
+                      />
+                      <label htmlFor="select-all-checkbox" className="text-lg sm:text-xl font-bold text-on-surface cursor-pointer whitespace-nowrap">
+                          {selectedDocPaths.size > 0 ? `${selectedDocPaths.size} of ${documents.length} selected` : `Found ${documents.length} documents`}
+                      </label>
+                  </div>
+                  <div className="flex-grow flex justify-start sm:justify-end">
+                      <button
+                          onClick={handleDownload}
+                          disabled={isExporting || selectedDocuments.length === 0}
+                          className="inline-flex justify-center items-center gap-2 px-5 py-2.5 border border-transparent text-sm font-bold rounded-full text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                          {isExporting ? <LoadingSpinner className="h-5 w-5" /> : <DownloadIcon className="h-5 w-5" />}
+                          Export Selected
+                      </button>
+                  </div>
               </div>
               <ul className="divide-y divide-outline/30">
                 {documents.map((doc) => (
-                  <li key={doc.name}>
+                  <li key={doc.path} className="flex items-center gap-4 p-4 hover:bg-surface-variant transition-colors">
+                     <input
+                        type="checkbox"
+                        id={`doc-checkbox-${doc.path}`}
+                        aria-labelledby={`doc-label-${doc.path}`}
+                        checked={selectedDocPaths.has(doc.path)}
+                        onChange={(e) => handleSelectDoc(doc.path, e.target.checked)}
+                        className="h-5 w-5 rounded border-outline text-primary focus:ring-primary accent-primary bg-surface-variant flex-shrink-0"
+                      />
                     <button 
                       onClick={() => setSelectedDoc(doc)}
-                      className="w-full flex items-center gap-4 p-4 text-left hover:bg-surface-variant transition-colors focus:outline-none focus:bg-primary-container/50"
+                      className="w-full flex items-center gap-4 text-left focus:outline-none group"
                     >
                       <DocumentIcon className="h-6 w-6 text-primary flex-shrink-0"/>
-                      <span className="text-md font-medium text-on-surface">{doc.name}</span>
+                      <div className="flex-grow">
+                        <span id={`doc-label-${doc.path}`} className="text-md font-medium text-on-surface group-hover:text-primary transition-colors">{doc.name}</span>
+                         {doc.path !== doc.name && <p className="text-xs text-on-surface-variant">{doc.path}</p>}
+                      </div>
                     </button>
                   </li>
                 ))}
               </ul>
             </div>
           )}
-          
         </main>
       </div>
     </>

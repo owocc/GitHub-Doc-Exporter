@@ -1,6 +1,6 @@
 import { DocContent, GitHubFile, GitHubUser } from '../types';
 
-const GITHUB_URL_REGEX = /https:\/\/github\.com\/(?<owner>[^/]+)\/(?<repo>[^/]+)\/tree\/(?<branch>[^/]+)\/(?<path>.+)/;
+const GITHUB_URL_REGEX = /https:\/\/github\.com\/(?<owner>[^/]+)\/(?<repo>[^/]+)\/tree\/(?<branch>[^/]+)\/(?<path>.*)/;
 
 interface GitHubRepoInfo {
   owner: string;
@@ -40,15 +40,18 @@ export async function getUser(token: string): Promise<GitHubUser> {
 }
 
 
-export async function fetchRepoDocs(url: string, token: string | null): Promise<DocContent[]> {
+export async function fetchRepoDocs(
+  url: string,
+  token: string | null,
+  maxDepth: number = 1
+): Promise<DocContent[]> {
   const repoInfo = parseGitHubUrl(url);
   if (!repoInfo) {
     throw new Error('Invalid GitHub repository URL format. Expected format: https://github.com/owner/repo/tree/branch/path');
   }
 
   const { owner, repo, branch, path } = repoInfo;
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
-
+  
   const apiHeaders: HeadersInit = {
       Accept: 'application/vnd.github.v3+json',
   };
@@ -56,74 +59,91 @@ export async function fetchRepoDocs(url: string, token: string | null): Promise<
     apiHeaders['Authorization'] = `token ${token}`;
   }
 
+  const allDocs: DocContent[] = [];
 
-  const response = await fetch(apiUrl, { headers: apiHeaders });
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error('Repository or path not found. Please check the URL.');
+  async function getContents(currentPath: string, currentDepth: number): Promise<void> {
+    if (currentDepth > maxDepth) {
+      return;
     }
-    if (response.status === 403) {
-      const rateLimitData = await response.json();
-      const message = token
-        ? "Your GitHub token may not have the required permissions (e.g., 'repo' scope for private repos), or you've exceeded your rate limit."
-        : `GitHub API rate limit exceeded. Please connect with a GitHub token to increase your limit. Message: ${rateLimitData.message}`;
-      throw new Error(message);
-    }
-    throw new Error(`Failed to fetch repository contents. Status: ${response.status}`);
-  }
 
-  const files: GitHubFile[] = await response.json();
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${currentPath}?ref=${branch}`;
+    const response = await fetch(apiUrl, { headers: apiHeaders });
 
-  const mdFiles = files.filter(
-    (file) => file.type === 'file' && (file.name.endsWith('.md') || file.name.endsWith('.mdx'))
-  );
-
-  if (mdFiles.length === 0) {
-    throw new Error('No .md or .mdx files found in the specified directory.');
-  }
-
-  const docContents = await Promise.all(
-    mdFiles.map(async (file) => {
-      try {
-        let content = '';
-
-        // For private repos, download_url can be null. In that case, we fetch from the API.
-        if (file.download_url === null) {
-            const fileApiResponse = await fetch(file.url, { headers: apiHeaders });
-             if (!fileApiResponse.ok) {
-                console.warn(`Failed to fetch content metadata for ${file.name}. Status: ${fileApiResponse.status}`);
-                return null;
-            }
-            const fileApiData = await fileApiResponse.json();
-            if (fileApiData.content && fileApiData.encoding === 'base64') {
-                content = atob(fileApiData.content);
-            } else {
-                console.warn(`Could not retrieve content for ${file.name} from API.`);
-                return null;
-            }
-        } else {
-            // For public repos, use the download_url.
-            // DO NOT send an Authorization header to raw.githubusercontent.com, as it can cause network errors.
-            const contentResponse = await fetch(file.download_url);
-            if (!contentResponse.ok) {
-              console.warn(`Failed to fetch content for ${file.name}. Status: ${contentResponse.status}`);
-              return null;
-            }
-            content = await contentResponse.text();
-        }
-
-        return {
-          name: file.name,
-          content,
-          url: file.html_url,
-        };
-      } catch (error) {
-        console.error(`Error fetching content for ${file.name}:`, error);
-        return null;
+    if (!response.ok) {
+      if (currentPath === path) { // Only throw for the root fetch, otherwise just warn
+          if (response.status === 404) {
+            throw new Error('Repository or path not found. Please check the URL.');
+          }
+          if (response.status === 403) {
+            const rateLimitData = await response.json();
+            const message = token
+              ? "Your GitHub token may not have the required permissions (e.g., 'repo' scope for private repos), or you've exceeded your rate limit."
+              : `GitHub API rate limit exceeded. Please connect with a GitHub token to increase your limit. Message: ${rateLimitData.message}`;
+            throw new Error(message);
+          }
+          throw new Error(`Failed to fetch repository contents for ${currentPath}. Status: ${response.status}`);
+      } else {
+          console.warn(`Skipping directory ${currentPath}: Failed to fetch contents. Status: ${response.status}`);
+          return;
       }
-    })
-  );
+    }
 
-  return docContents.filter((doc): doc is DocContent => doc !== null);
+    const items: GitHubFile[] = await response.json();
+    const promises: Promise<any>[] = [];
+
+    for (const item of items) {
+      if (item.type === 'file' && (item.name.endsWith('.md') || item.name.endsWith('.mdx'))) {
+        promises.push(
+          (async () => {
+            try {
+              let content = '';
+              if (item.download_url === null) {
+                const fileApiResponse = await fetch(item.url, { headers: apiHeaders });
+                if (!fileApiResponse.ok) {
+                  console.warn(`Failed to fetch content metadata for ${item.name}. Status: ${fileApiResponse.status}`);
+                  return;
+                }
+                const fileApiData = await fileApiResponse.json();
+                if (fileApiData.content && fileApiData.encoding === 'base64') {
+                  content = atob(fileApiData.content);
+                } else {
+                   console.warn(`Could not retrieve content for ${item.name} from API.`);
+                   return;
+                }
+              } else {
+                const contentResponse = await fetch(item.download_url);
+                if (!contentResponse.ok) {
+                  console.warn(`Failed to fetch content for ${item.name}. Status: ${contentResponse.status}`);
+                  return;
+                }
+                content = await contentResponse.text();
+              }
+              
+              const relativePath = item.path.substring(path.length).replace(/^\//, '');
+
+              allDocs.push({
+                name: item.name,
+                path: relativePath,
+                content,
+                url: item.html_url,
+              });
+            } catch (error) {
+              console.error(`Error fetching content for ${item.name}:`, error);
+            }
+          })()
+        );
+      } else if (item.type === 'dir') {
+        promises.push(getContents(item.path, currentDepth + 1));
+      }
+    }
+    await Promise.all(promises);
+  }
+
+  await getContents(path, 1);
+  
+  if (allDocs.length === 0) {
+      throw new Error('No .md or .mdx files found in the specified directory (or subdirectories if enabled).');
+  }
+
+  return allDocs.sort((a, b) => a.path.localeCompare(b.path));
 }
