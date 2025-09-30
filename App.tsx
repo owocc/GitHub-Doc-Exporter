@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { DocContent, GitHubUser } from './types';
 import { fetchRepoDocs, getUser } from './services/githubService';
-import AccordionItem from './components/AccordionItem';
+import DocumentViewerModal from './components/AccordionItem';
 import ExportControls from './components/ExportControls';
 
 const GithubIcon: React.FC<{className?: string}> = ({className}) => (
@@ -10,31 +10,75 @@ const GithubIcon: React.FC<{className?: string}> = ({className}) => (
     </svg>
 );
 
-const LoadingSpinner: React.FC = () => (
-    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+const DocumentIcon: React.FC<{className?: string}> = ({className}) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+    <path fillRule="evenodd" d="M4 2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.707a2 2 0 0 0-.586-1.414l-4.293-4.293A2 2 0 0 0 11.293 2H4Zm6 2.5a.5.5 0 0 1 .5.5v1.793l1.146-1.147a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 .708-.708L9.5 6.793V5a.5.5 0 0 1 .5-.5Z" clipRule="evenodd" />
+  </svg>
+);
+
+
+const LoadingSpinner: React.FC<{className?: string}> = ({className = "h-5 w-5"}) => (
+    <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
     </svg>
 );
 
 const ErrorIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-400 mr-3" viewBox="0 0 20 20" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-error mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-9a1 1 0 112 0v2a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
     </svg>
 );
+
+const SunIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.697 6.303a.75.75 0 0 1 0 1.06-7.5 7.5 0 0 1-10.607 10.607.75.75 0 0 1-1.06-1.06 9 9 0 0 0 12.727-12.727.75.75 0 0 1 1.06 0ZM12 19.5a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0v-2.25a.75.75 0 0 1 .75-.75Z" />
+  </svg>
+);
+
+const MoonIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path fillRule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.981A10.503 10.503 0 0 1 12 22.5a10.5 10.5 0 0 1-10.5-10.5c0-4.307 2.56-8.02 6.31-9.782a.75.75 0 0 1 .819.162Z" clipRule="evenodd" />
+  </svg>
+);
+
 
 const App: React.FC = () => {
   const [repoUrl, setRepoUrl] = useState<string>('https://github.com/tailwindlabs/tailwindcss.com/tree/main/src/docs');
   const [documents, setDocuments] = useState<DocContent[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [openAccordion, setOpenAccordion] = useState<string | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocContent | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<GitHubUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [tokenInput, setTokenInput] = useState('');
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isVerifyingToken, setIsVerifyingToken] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'light');
+  
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+  
+  useEffect(() => {
+    const storedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (storedTheme === 'dark' || (!storedTheme && systemPrefersDark)) {
+      setTheme('dark');
+      document.documentElement.classList.add('dark');
+    } else {
+      setTheme('light');
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
 
   const handleVerifyToken = async (tokenToVerify: string) => {
     if (!tokenToVerify) {
@@ -86,7 +130,6 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setDocuments([]);
-    setOpenAccordion(null);
 
     try {
       const docs = await fetchRepoDocs(repoUrl, token);
@@ -102,29 +145,24 @@ const App: React.FC = () => {
     setRepoUrl('');
     setDocuments([]);
     setError(null);
-    setOpenAccordion(null);
-  };
-
-  const toggleAccordion = (docName: string) => {
-    setOpenAccordion(prev => (prev === docName ? null : docName));
   };
 
   const AuthModal = () => (
-    <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 transition-opacity" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-gray-700 transform transition-all">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div className="bg-surface rounded-3xl shadow-xl p-6 w-full max-w-md border border-outline/50">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-white" id="modal-title">Connect to GitHub</h3>
-                <button onClick={() => setIsAuthModalOpen(false)} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                <h3 className="text-xl font-bold text-on-surface" id="modal-title">Connect to GitHub</h3>
+                <button onClick={() => setIsAuthModalOpen(false)} className="text-on-surface-variant hover:text-on-surface text-3xl leading-none">&times;</button>
             </div>
-            <p className="text-sm text-gray-400 mb-4">
-                Provide a GitHub Personal Access Token to increase API rate limits and access private repositories.
+            <p className="text-sm text-on-surface-variant mb-4">
+                Provide a Personal Access Token to increase API rate limits and access private repositories.
             </p>
-            <a href="https://github.com/settings/tokens/new?scopes=repo&description=GitHub%20Doc%20Exporter" target="_blank" rel="noopener noreferrer" className="text-sm text-cyan-400 hover:text-cyan-300 underline mb-4 inline-block">
+            <a href="https://github.com/settings/tokens/new?scopes=repo&description=GitHub%20Doc%20Exporter" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline mb-4 inline-block font-semibold">
                 Create a new token here.
             </a>
-            <p className="text-xs text-gray-500 mb-4">
-                We recommend granting the <code className="text-xs">repo</code> scope to access both public and private documentation. The token is stored only in your browser's local storage.
-            </p>
+             <div className="text-xs text-on-surface-variant bg-surface-variant p-3 rounded-lg mb-4">
+                We recommend the <code className="text-xs bg-outline/20 px-1 py-0.5 rounded">repo</code> scope for private docs. Your token is only stored in your browser.
+            </div>
             <div>
                 <label htmlFor="token-input" className="sr-only">GitHub Token</label>
                 <input
@@ -133,23 +171,23 @@ const App: React.FC = () => {
                     value={tokenInput}
                     onChange={(e) => setTokenInput(e.target.value)}
                     placeholder="ghp_..."
-                    className="w-full bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-4 text-white placeholder-gray-500 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
+                    className="w-full bg-surface-variant border border-outline text-on-surface-variant placeholder:text-on-surface-variant rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm"
                 />
             </div>
-            {tokenError && <p className="text-red-400 text-sm mt-2">{tokenError}</p>}
+            {tokenError && <p className="text-error text-sm mt-2">{tokenError}</p>}
             <div className="mt-6 flex justify-end gap-3">
                 <button
                     onClick={() => setIsAuthModalOpen(false)}
-                    className="px-4 py-2 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-gray-900"
+                    className="px-6 py-2 text-sm font-semibold rounded-full text-on-surface-variant bg-surface-variant hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-outline"
                 >
                     Cancel
                 </button>
                 <button
                     onClick={() => handleVerifyToken(tokenInput)}
                     disabled={isVerifyingToken}
-                    className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-900 disabled:bg-cyan-800 disabled:cursor-not-allowed"
+                    className="inline-flex justify-center items-center px-6 py-2 border border-transparent text-sm font-semibold rounded-full shadow-sm text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isVerifyingToken ? <><LoadingSpinner /> Verifying...</> : 'Save & Connect'}
+                    {isVerifyingToken ? <><LoadingSpinner className="h-4 w-4 mr-2"/> Verifying...</> : 'Save & Connect'}
                 </button>
             </div>
         </div>
@@ -157,67 +195,66 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-200">
+    <>
       {isAuthModalOpen && <AuthModal />}
+      <DocumentViewerModal doc={selectedDoc} onClose={() => setSelectedDoc(null)} />
       <div className="container mx-auto px-4 py-8 md:py-12 max-w-4xl">
-        <header className="mb-8">
-            <div className="flex justify-between items-start">
-                <div className="text-left">
-                    <div className="flex items-center gap-4 mb-2">
-                        <GithubIcon className="h-10 w-10 text-cyan-400"/>
-                        <h1 className="text-4xl md:text-5xl font-extrabold text-white">GitHub Doc Exporter</h1>
+        <header className="mb-8 flex justify-between items-start gap-4">
+            <div>
+                <div className="flex items-center gap-4 mb-2">
+                    <div className="bg-surface p-2 rounded-2xl border border-outline/30">
+                        <GithubIcon className="h-8 w-8 text-primary"/>
                     </div>
-                    <p className="text-lg text-gray-400">Fetch, view, and export markdown docs from any public GitHub repository folder.</p>
+                    <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight">GitHub Doc Exporter</h1>
                 </div>
-                <div className="flex-shrink-0 pt-2">
-                    {user ? (
-                        <div className="flex items-center gap-3 bg-gray-800/50 border border-gray-700 rounded-full p-1 pl-3">
-                            <img src={user.avatar_url} alt={user.login} className="h-8 w-8 rounded-full"/>
-                            <a href={user.html_url} target="_blank" rel="noopener noreferrer" className="text-white font-medium hidden sm:inline hover:underline">{user.login}</a>
-                            <button onClick={handleLogout} title="Logout" className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-gray-900">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 15l3-3m0 0l-3-3m3 3H5" />
-                                </svg>
-                            </button>
+                <p className="text-md text-on-surface-variant">Fetch, view, and export markdown docs from any GitHub repository folder.</p>
+            </div>
+            <div className="flex-shrink-0 pt-1 flex items-center gap-4">
+                <button onClick={toggleTheme} className="p-2 rounded-full text-on-surface-variant hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-primary">
+                    {theme === 'light' ? <MoonIcon className="h-6 w-6" /> : <SunIcon className="h-6 w-6" />}
+                </button>
+                {user ? (
+                    <div className="flex items-center gap-3">
+                        <img src={user.avatar_url} alt={user.login} className="h-10 w-10 rounded-full border-2 border-outline/50"/>
+                        <div className="hidden sm:block">
+                            <a href={user.html_url} target="_blank" rel="noopener noreferrer" className="text-on-surface font-semibold hover:underline">{user.login}</a>
+                            <button onClick={handleLogout} className="text-xs text-on-surface-variant hover:text-primary block text-left">Logout</button>
                         </div>
-                    ) : (
-                        <button
-                            onClick={() => {
-                              setIsAuthModalOpen(true);
-                              setTokenError(null);
-                            }}
-                            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-gray-900"
-                        >
-                            <GithubIcon className="h-5 w-5"/> Connect GitHub
-                        </button>
-                    )}
-                </div>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => { setIsAuthModalOpen(true); setTokenError(null); }}
+                        className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
+                    >
+                        <GithubIcon className="h-5 w-5"/> Connect GitHub
+                    </button>
+                )}
             </div>
         </header>
 
         <main>
-          <div className="bg-gray-800/50 p-6 rounded-lg shadow-lg border border-gray-700">
+          <div className="bg-surface p-6 rounded-3xl border border-outline/30">
             <div className="flex flex-col sm:flex-row gap-4">
               <input
                 type="text"
                 value={repoUrl}
                 onChange={(e) => setRepoUrl(e.target.value)}
                 placeholder="e.g., https://github.com/owner/repo/tree/main/docs"
-                className="flex-grow bg-gray-900 border border-gray-600 rounded-md shadow-sm py-2 px-4 text-white placeholder-gray-500 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
+                className="flex-grow w-full bg-surface-variant border border-outline text-on-surface-variant placeholder:text-on-surface-variant rounded-full py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-colors"
                 disabled={isLoading}
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <button
                     onClick={handleFetchDocs}
                     disabled={isLoading}
-                    className="inline-flex flex-1 sm:flex-none justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-900 disabled:bg-cyan-800 disabled:cursor-not-allowed"
+                    className="inline-flex flex-1 sm:flex-none justify-center items-center px-6 py-3 border border-transparent text-sm font-bold rounded-full text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                    {isLoading ? <><LoadingSpinner/> Fetching...</> : 'Fetch Docs'}
+                    {isLoading ? <><LoadingSpinner className="h-5 w-5 mr-2"/> Fetching...</> : 'Fetch Docs'}
                 </button>
                 {(documents.length > 0 || repoUrl !== 'https://github.com/tailwindlabs/tailwindcss.com/tree/main/src/docs') && (
                     <button
                         onClick={handleClear}
-                        className="inline-flex flex-1 sm:flex-none justify-center items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-gray-900"
+                        className="inline-flex flex-1 sm:flex-none justify-center items-center px-6 py-3 text-sm font-bold rounded-full text-on-surface-variant bg-surface-variant hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-outline transition-colors"
                     >
                         Clear
                     </button>
@@ -227,33 +264,41 @@ const App: React.FC = () => {
           </div>
 
           {error && (
-            <div className="mt-6 bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg flex items-center" role="alert">
+            <div className="mt-6 bg-error/10 border border-error/30 text-error px-4 py-3 rounded-xl flex items-start" role="alert">
                 <ErrorIcon/>
                 <span className="block sm:inline">{error}</span>
             </div>
           )}
 
           {documents.length > 0 && (
-            <div className="mt-8">
-              <h2 className="text-2xl font-bold mb-4 text-white">
-                Found {documents.length} Documents
-              </h2>
-              <div className="space-y-2">
-                {documents.map((doc) => (
-                  <AccordionItem 
-                    key={doc.name} 
-                    doc={doc} 
-                    isOpen={openAccordion === doc.name} 
-                    onToggle={() => toggleAccordion(doc.name)}
-                  />
-                ))}
+            <div className="mt-8 bg-surface rounded-3xl border border-outline/30 overflow-hidden">
+              <div className="p-6 border-b border-outline/30">
+                  <h2 className="text-xl font-bold text-on-surface">
+                    Found {documents.length} Documents
+                  </h2>
               </div>
-              <ExportControls documents={documents} />
+              <ul className="divide-y divide-outline/30">
+                {documents.map((doc) => (
+                  <li key={doc.name}>
+                    <button 
+                      onClick={() => setSelectedDoc(doc)}
+                      className="w-full flex items-center gap-4 p-4 text-left hover:bg-surface-variant transition-colors focus:outline-none focus:bg-primary-container/50"
+                    >
+                      <DocumentIcon className="h-6 w-6 text-primary flex-shrink-0"/>
+                      <span className="text-md font-medium text-on-surface">{doc.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
+          )}
+          
+          {documents.length > 0 && (
+              <ExportControls documents={documents} />
           )}
         </main>
       </div>
-    </div>
+    </>
   );
 };
 

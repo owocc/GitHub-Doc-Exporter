@@ -26,7 +26,7 @@ const ExportControls: React.FC<ExportControlsProps> = ({ documents }) => {
 
   const createMergedContent = (docs: DocContent[]): string => {
     return docs
-      .map(doc => `${doc.content}\n\n---\n\nSource: ${doc.url}`)
+      .map(doc => `[Source: ${doc.url}]\n\n${doc.content}`)
       .join('\n\n---\n\n');
   };
 
@@ -65,51 +65,61 @@ const ExportControls: React.FC<ExportControlsProps> = ({ documents }) => {
   };
 
   return (
-    <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mt-8">
-      <h3 className="text-xl font-bold mb-4 text-white">Export Options</h3>
+    <div className="bg-surface rounded-3xl p-6 mt-8 border border-outline/30">
+      <h3 className="text-xl font-bold mb-4 text-on-surface">Export Options</h3>
       <div className="space-y-4">
-        <div className="flex items-center">
-          <input
-            type="radio"
-            id="exportAll"
-            name="exportType"
-            value="all"
-            checked={exportType === 'all'}
-            onChange={() => setExportType('all')}
-            className="h-4 w-4 text-cyan-600 bg-gray-700 border-gray-600 focus:ring-cyan-500"
-          />
-          <label htmlFor="exportAll" className="ml-3 block text-sm font-medium text-gray-300">
-            Merge all documents into a single .md file
+        <div>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="exportType"
+              value="all"
+              checked={exportType === 'all'}
+              onChange={() => setExportType('all')}
+              className="peer sr-only"
+            />
+            <div className="w-5 h-5 border-2 border-outline rounded-full mr-3 flex items-center justify-center peer-checked:border-primary">
+              <div className="w-2.5 h-2.5 rounded-full bg-primary scale-0 peer-checked:scale-100 transition-transform"></div>
+            </div>
+            <span className="text-sm font-medium text-on-surface">
+              Merge all documents into a single .md file
+            </span>
           </label>
         </div>
-        <div className="flex items-center">
-          <input
-            type="radio"
-            id="exportRange"
-            name="exportType"
-            value="range"
-            checked={exportType === 'range'}
-            onChange={() => setExportType('range')}
-            className="h-4 w-4 text-cyan-600 bg-gray-700 border-gray-600 focus:ring-cyan-500"
-          />
-          <label htmlFor="exportRange" className="ml-3 block text-sm font-medium text-gray-300">
-            Group into files of
+        <div>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              name="exportType"
+              value="range"
+              checked={exportType === 'range'}
+              onChange={() => setExportType('range')}
+              className="peer sr-only"
+            />
+            <div className="w-5 h-5 border-2 border-outline rounded-full mr-3 flex items-center justify-center peer-checked:border-primary">
+                <div className="w-2.5 h-2.5 rounded-full bg-primary scale-0 peer-checked:scale-100 transition-transform"></div>
+            </div>
+            <span className="text-sm font-medium text-on-surface">
+              Group into files of
+            </span>
           </label>
-          <input
-            type="number"
-            value={rangeSize}
-            onChange={(e) => setRangeSize(Math.max(1, parseInt(e.target.value, 10) || 1))}
-            disabled={exportType !== 'range'}
-            className="ml-2 w-20 bg-gray-900 border border-gray-600 rounded-md shadow-sm py-1 px-2 text-white focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm disabled:opacity-50"
-          />
-          <span className="ml-2 text-sm text-gray-400">docs per .md file (in a .zip)</span>
+           <div className="pl-8 mt-2 flex items-center gap-2">
+             <input
+                type="number"
+                value={rangeSize}
+                onChange={(e) => setRangeSize(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                disabled={exportType !== 'range'}
+                className="w-24 bg-surface-variant border border-outline text-on-surface-variant rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm disabled:opacity-50"
+             />
+             <span className="text-sm text-on-surface-variant">docs per .md file (creates a .zip)</span>
+           </div>
         </div>
       </div>
       <div className="mt-6">
         <button
           onClick={handleDownload}
           disabled={isExporting}
-          className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-900 disabled:bg-cyan-800 disabled:cursor-not-allowed"
+          className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-semibold rounded-full shadow-sm text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isExporting ? 'Exporting...' : 'Download'}
         </button>

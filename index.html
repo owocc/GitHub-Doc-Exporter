@@ -5,41 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GitHub Doc Exporter</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    typography: ({ theme }) => ({
-                        DEFAULT: {
-                            css: {
-                                code: {
-                                    backgroundColor: theme('colors.gray.800'),
-                                    color: theme('colors.gray.200'),
-                                    padding: '0.2em 0.4em',
-                                    borderRadius: '0.25rem',
-                                },
-                                'code::before': {
-                                    content: '""',
-                                },
-                                'code::after': {
-                                    content: '""',
-                                },
-                                pre: {
-                                    backgroundColor: theme('colors.gray.800'),
-                                    color: theme('colors.gray.200'),
-                                },
-                            },
-                        },
-                    }),
-                }
-            },
-            plugins: [
-                require('@tailwindcss/typography'),
-            ],
-        }
-    </script>
-     <script src="https://cdn.tailwindcss.com/3.4.1?plugins=typography"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
 <script type="importmap">
 {
   "imports": {
@@ -49,8 +15,70 @@
   }
 }
 </script>
+<style type="text/css">
+  :root {
+    --color-primary: 271 39% 51%; /* #6750A4 */
+    --color-on-primary: 0 0% 100%; /* #FFFFFF */
+    --color-primary-container: 270 100% 93%; /* #EADDFF */
+    --color-on-primary-container: 271 100% 18%; /* #21005D */
+    --color-surface: 270 50% 98%; /* #FFFBFE */
+    --color-on-surface: 274 10% 11%; /* #1C1B1F */
+    --color-surface-variant: 273 24% 92%; /* #E7E0EC */
+    --color-on-surface-variant: 274 7% 29%; /* #49454F */
+    --color-background: 270 50% 98%; /* #FFFBFE */
+    --color-on-background: 274 10% 11%; /* #1C1B1F */
+    --color-outline: 273 5% 48%; /* #79747E */
+    --color-error: 4 71% 40%; /* #B3261E */
+    --color-on-error: 0 0% 100%; /* #FFFFFF */
+  }
+  .dark {
+    --color-primary: 262 100% 87%; /* #D0BCFF */
+    --color-on-primary: 266 59% 28%; /* #381E72 */
+    --color-primary-container: 264 43% 38%; /* #4F378B */
+    --color-on-primary-container: 270 100% 93%; /* #EADDFF */
+    --color-surface: 274 10% 11%; /* #1C1B1F */
+    --color-on-surface: 273 13% 90%; /* #E6E1E5 */
+    --color-surface-variant: 274 7% 29%; /* #49454F */
+    --color-on-surface-variant: 274 10% 80%; /* #CAC4D0 */
+    --color-background: 274 10% 11%; /* #1C1B1F */
+    --color-on-background: 273 13% 90%; /* #E6E1E5 */
+    --color-outline: 273 5% 59%; /* #938F99 */
+    --color-error: 6 85% 83%; /* #F2B8B5 */
+    --color-on-error: 4 67% 22%; /* #601410 */
+  }
+</style>
+<script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+              colors: {
+                error: 'hsl(var(--color-error) / <alpha-value>)',
+                'on-error': 'hsl(var(--color-on-error) / <alpha-value>)',
+                primary: 'hsl(var(--color-primary) / <alpha-value>)',
+                'on-primary': 'hsl(var(--color-on-primary) / <alpha-value>)',
+                'primary-container': 'hsl(var(--color-primary-container) / <alpha-value>)',
+                'on-primary-container': 'hsl(var(--color-on-primary-container) / <alpha-value>)',
+                surface: 'hsl(var(--color-surface) / <alpha-value>)',
+                'on-surface': 'hsl(var(--color-on-surface) / <alpha-value>)',
+                'surface-variant': 'hsl(var(--color-surface-variant) / <alpha-value>)',
+                'on-surface-variant': 'hsl(var(--color-on-surface-variant) / <alpha-value>)',
+                background: 'hsl(var(--color-background) / <alpha-value>)',
+                'on-background': 'hsl(var(--color-on-background) / <alpha-value>)',
+                outline: 'hsl(var(--color-outline) / <alpha-value>)',
+              },
+            },
+        },
+    };
+    // FOUC Prevention: Immediately set the theme from localStorage
+    if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+</script>
 </head>
-<body class="bg-gray-900 text-gray-200 font-sans">
+<body class="bg-background text-on-background font-sans transition-colors duration-300">
     <div id="root"></div>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
