@@ -155,7 +155,6 @@ const App: React.FC = () => {
   }, [repoUrl]);
   
   const selectedDocuments = useMemo(() => {
-    if (selectedDocPaths.size === 0) return [];
     return documents.filter(doc => selectedDocPaths.has(doc.path));
   }, [documents, selectedDocPaths]);
 
@@ -214,24 +213,6 @@ const App: React.FC = () => {
     loadHistory();
   }, []);
 
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        isSettingsPanelOpen &&
-        settingsPanelRef.current &&
-        !settingsPanelRef.current.contains(event.target as Node) &&
-        settingsButtonRef.current &&
-        !settingsButtonRef.current.contains(event.target as Node)
-      ) {
-        setIsSettingsPanelOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isSettingsPanelOpen]);
   
   // Persist export settings to localStorage
   useEffect(() => {
@@ -336,8 +317,11 @@ const App: React.FC = () => {
   }, [repoUrl, activeToken, fetchSubdirectories, maxDepth, repoName]);
 
   const handleDownload = useCallback(async () => {
-    const docsToExport = selectedDocuments.length > 0 ? selectedDocuments : documents;
-    if (docsToExport.length === 0) return;
+    const docsToExport = selectedDocPaths.size > 0 ? selectedDocuments : documents;
+    if (docsToExport.length === 0) {
+      alert("No documents to export.");
+      return;
+    }
     
     setIsExporting(true);
 
@@ -418,7 +402,7 @@ const App: React.FC = () => {
     } finally {
         setIsExporting(false);
     }
-  }, [selectedDocuments, documents, exportType, repoName, mergeInZip, filesPerMergedFile]);
+  }, [selectedDocPaths, selectedDocuments, documents, exportType, repoName, mergeInZip, filesPerMergedFile]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -613,6 +597,16 @@ const App: React.FC = () => {
     </div>
   );
 
+  const exportButtonText = useMemo(() => {
+    if (selectedDocPaths.size > 0) {
+        return `Export ${selectedDocPaths.size} Selected`;
+    }
+    if (documents.length > 0) {
+        return `Export All (${documents.length})`;
+    }
+    return 'Export';
+  }, [selectedDocPaths.size, documents.length]);
+
   return (
     <>
       {isTokenManagerOpen && <TokenManagerModal />}
@@ -648,68 +642,103 @@ const App: React.FC = () => {
                         )}
                      </button>
                      {isSettingsPanelOpen && (
-                        <div ref={settingsPanelRef} className="absolute top-full right-0 mt-2 w-80 bg-surface rounded-3xl shadow-xl border border-outline/30 z-20">
-                            <div className="p-4">
-                               {activeUser && activeToken ? (
-                                    <div>
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <img src={activeUser.avatar_url} alt={activeUser.login} className="h-10 w-10 rounded-full"/>
-                                            <div>
-                                                <a href={activeUser.html_url} target="_blank" rel="noopener noreferrer" className="text-on-surface font-semibold hover:underline">{activeUser.login}</a>
-                                                <p className="text-xs text-on-surface-variant truncate">
-                                                    Active Token: <code className="font-mono bg-outline/20 px-1 py-0.5 rounded">{`ghp_...${activeToken.slice(-4)}`}</code>
-                                                </p>
+                        <>
+                            <div
+                                className="fixed inset-0 z-20 bg-black/60 md:bg-transparent"
+                                onClick={() => setIsSettingsPanelOpen(false)}
+                                aria-hidden="true"
+                            ></div>
+
+                            <div
+                                ref={settingsPanelRef}
+                                className="
+                                    bg-surface shadow-xl z-30
+                                    fixed bottom-0 left-0 right-0 rounded-t-3xl border-t border-outline/30 animate-slide-in-up
+                                    md:absolute md:top-full md:right-0 md:bottom-auto md:left-auto md:mt-2 md:w-80 md:rounded-3xl md:border md:origin-top-right
+                                "
+                            >
+                                <div className="w-10 h-1.5 bg-outline rounded-full mx-auto my-3 md:hidden" aria-hidden="true"></div>
+                                
+                                <div className="p-4">
+                                   {activeUser && activeToken ? (
+                                        <div>
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <img src={activeUser.avatar_url} alt={activeUser.login} className="h-10 w-10 rounded-full"/>
+                                                <div>
+                                                    <a href={activeUser.html_url} target="_blank" rel="noopener noreferrer" className="text-on-surface font-semibold hover:underline">{activeUser.login}</a>
+                                                    <p className="text-xs text-on-surface-variant truncate">
+                                                        Active Token: <code className="font-mono bg-outline/20 px-1 py-0.5 rounded">{`ghp_...${activeToken.slice(-4)}`}</code>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end items-center gap-4">
+                                                <button 
+                                                    onClick={() => {
+                                                        setIsTokenManagerOpen(true);
+                                                        setIsSettingsPanelOpen(false);
+                                                    }}
+                                                    className="text-sm font-semibold text-primary hover:underline focus:outline-none"
+                                                >
+                                                    Manage Tokens
+                                                </button>
+                                                <button onClick={handleLogout} className="text-sm font-semibold text-primary hover:underline focus:outline-none">
+                                                    Logout
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="flex justify-end items-center gap-4">
-                                            <button 
-                                                onClick={() => {
-                                                    setIsTokenManagerOpen(true);
-                                                    setIsSettingsPanelOpen(false);
-                                                }}
-                                                className="text-sm font-semibold text-primary hover:underline focus:outline-none"
-                                            >
-                                                Manage Tokens
-                                            </button>
-                                            <button onClick={handleLogout} className="text-sm font-semibold text-primary hover:underline focus:outline-none">
-                                                Logout
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
+                                    ) : (
+                                        <button
+                                            onClick={() => { setIsTokenManagerOpen(true); setIsSettingsPanelOpen(false); }}
+                                            className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
+                                        >
+                                            <GithubIcon className="h-5 w-5"/> Connect GitHub
+                                        </button>
+                                    )}
+                                </div>
+                                <hr className="border-outline/30" />
+                                 <div className="p-4">
                                     <button
-                                        onClick={() => { setIsTokenManagerOpen(true); setIsSettingsPanelOpen(false); }}
-                                        className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
+                                        onClick={() => { setIsHistoryModalOpen(true); setIsSettingsPanelOpen(false); }}
+                                        className="w-full inline-flex items-center justify-center gap-3 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
                                     >
-                                        <GithubIcon className="h-5 w-5"/> Connect GitHub
+                                        <HistoryIcon className="h-5 w-5"/> View Fetch History
                                     </button>
-                                )}
+                                </div>
+                                <hr className="border-outline/30" />
+                                <div className="p-4">
+                                    <ExportControls
+                                        exportType={exportType}
+                                        setExportType={setExportType}
+                                        fetchSubdirectories={fetchSubdirectories}
+                                        setFetchSubdirectories={setFetchSubdirectories}
+                                        maxDepth={maxDepth}
+                                        setMaxDepth={setMaxDepth}
+                                        mergeInZip={mergeInZip}
+                                        setMergeInZip={setMergeInZip}
+                                        filesPerMergedFile={filesPerMergedFile}
+                                        setFilesPerMergedFile={setFilesPerMergedFile}
+                                    />
+                                </div>
                             </div>
-                            <hr className="border-outline/30" />
-                             <div className="p-4">
-                                <button
-                                    onClick={() => { setIsHistoryModalOpen(true); setIsSettingsPanelOpen(false); }}
-                                    className="w-full inline-flex items-center justify-center gap-3 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
-                                >
-                                    <HistoryIcon className="h-5 w-5"/> View Fetch History
-                                </button>
-                            </div>
-                            <hr className="border-outline/30" />
-                            <div className="p-4">
-                                <ExportControls
-                                    exportType={exportType}
-                                    setExportType={setExportType}
-                                    fetchSubdirectories={fetchSubdirectories}
-                                    setFetchSubdirectories={setFetchSubdirectories}
-                                    maxDepth={maxDepth}
-                                    setMaxDepth={setMaxDepth}
-                                    mergeInZip={mergeInZip}
-                                    setMergeInZip={setMergeInZip}
-                                    filesPerMergedFile={filesPerMergedFile}
-                                    setFilesPerMergedFile={setFilesPerMergedFile}
-                                />
-                            </div>
-                        </div>
+                            <style>{`
+                                @keyframes slide-in-up {
+                                    from { transform: translateY(100%); }
+                                    to { transform: translateY(0); }
+                                }
+                                .animate-slide-in-up {
+                                    animation: slide-in-up 0.3s ease-out;
+                                }
+                                @media (min-width: 768px) {
+                                    .animate-slide-in-up {
+                                        animation: fade-in-popover 0.15s ease-out;
+                                    }
+                                    @keyframes fade-in-popover {
+                                        from { opacity: 0; transform: scale(0.95); }
+                                        to { opacity: 1; transform: scale(1); }
+                                    }
+                                }
+                            `}</style>
+                        </>
                      )}
                 </div>
             </div>
@@ -756,7 +785,7 @@ const App: React.FC = () => {
           {documents.length > 0 && (
             <div className="mt-8 bg-surface rounded-3xl border border-outline/30 overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-outline/30 flex flex-wrap items-center justify-between gap-4">
-                  <div className="group flex items-center gap-3 flex-shrink-0">
+                  <div className="group flex items-center gap-3 flex-shrink-0" onMouseOverCapture={() => {}} onFocusCapture={() => {}}>
                       <input
                           type="checkbox"
                           id="select-all-checkbox"
@@ -776,7 +805,7 @@ const App: React.FC = () => {
                           className="inline-flex justify-center items-center gap-2 px-5 py-2.5 border border-transparent text-sm font-bold rounded-full text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                           {isExporting ? <LoadingSpinner className="h-5 w-5" /> : <DownloadIcon className="h-5 w-5" />}
-                          {selectedDocPaths.size > 0 ? `Export ${selectedDocPaths.size} Selected` : `Export All (${documents.length})`}
+                          <span>{exportButtonText}</span>
                       </button>
                   </div>
               </div>
