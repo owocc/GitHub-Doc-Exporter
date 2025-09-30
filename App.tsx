@@ -13,6 +13,8 @@ interface StoredToken {
   user: GitHubUser;
 }
 
+type ThemePreference = 'light' | 'dark' | 'system';
+
 // --- NEW ICONS ---
 const DownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
@@ -59,12 +61,18 @@ const ErrorIcon: React.FC = () => (
 );
 
 const SunIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" className={className}>{/* Icon from Material Design Icons by Pictogrammers - https://github.com/Templarian/MaterialDesign/blob/master/LICENSE */}<path fill="currentColor" d="m3.55 19.09l1.41 1.41l1.8-1.79l-1.42-1.42M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6s6-2.69 6-6c0-3.32-2.69-6-6-6m8 7h3v-2h-3m-2.76 7.71l1.8 1.79l1.41-1.41l-1.79-1.8M20.45 5l-1.41-1.4l-1.8 1.79l1.42 1.42M13 1h-2v3h2M6.76 5.39L4.96 3.6L3.55 5l1.79 1.81zM1 13h3v-2H1m12 9h-2v3h2" /></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}><path d="m3.55 19.09l1.41 1.41l1.8-1.79l-1.42-1.42M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6s6-2.69 6-6c0-3.32-2.69-6-6-6m8 7h3v-2h-3m-2.76 7.71l1.8 1.79l1.41-1.41l-1.79-1.8M20.45 5l-1.41-1.4l-1.8 1.79l1.42 1.42M13 1h-2v3h2M6.76 5.39L4.96 3.6L3.55 5l1.79 1.81zM1 13h3v-2H1m12 9h-2v3h2" /></svg>
 );
 
 const MoonIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
     <path fillRule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.981A10.503 10.503 0 0 1 12 22.5a10.5 10.5 0 0 1-10.5-10.5c0-4.307 2.56-8.02 6.31-9.782a.75.75 0 0 1 .819.162Z" clipRule="evenodd" />
+  </svg>
+);
+
+const DesktopIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M21 16H3V4h18m0-2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Z"/>
   </svg>
 );
 
@@ -104,7 +112,9 @@ const App: React.FC = () => {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isVerifyingToken, setIsVerifyingToken] = useState(false);
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'light');
+  const [themePreference, setThemePreference] = useState<ThemePreference>(
+    () => (localStorage.getItem('theme') as ThemePreference) || 'system'
+  );
 
   // State for fetch/export settings with localStorage persistence
   const [fetchSubdirectories, setFetchSubdirectories] = useState<boolean>(() => {
@@ -151,28 +161,31 @@ const App: React.FC = () => {
     return documents.filter(doc => selectedDocPaths.has(doc.path));
   }, [documents, selectedDocPaths]);
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+  // Effect to apply theme and listen for system changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const updateTheme = () => {
+        const preference = localStorage.getItem('theme') as ThemePreference || 'system';
+        if (preference === 'dark' || (preference === 'system' && mediaQuery.matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    };
+
+    updateTheme(); // Apply theme on initial load and preference change
+    mediaQuery.addEventListener('change', updateTheme); // Listen for system changes
+
+    return () => mediaQuery.removeEventListener('change', updateTheme);
+  }, [themePreference]);
+
+
+  const handleThemeChange = (preference: ThemePreference) => {
+    setThemePreference(preference);
+    localStorage.setItem('theme', preference);
   };
 
-  useEffect(() => {
-    const storedTheme = localStorage.getItem('theme');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (storedTheme === 'dark' || (!storedTheme && systemPrefersDark)) {
-      setTheme('dark');
-      document.documentElement.classList.add('dark');
-    } else {
-      setTheme('light');
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
 
   // Load tokens and history from storage on initial render
   useEffect(() => {
@@ -623,9 +636,6 @@ const App: React.FC = () => {
             <p className="text-md text-on-surface-variant">Fetch, view, and export markdown docs from any GitHub repository folder.</p>
           </div>
           <div className="flex-shrink-0 pt-1 flex items-center gap-4">
-            <button onClick={toggleTheme} className="p-2 rounded-full text-on-surface-variant hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-primary">
-              {theme === 'light' ? <MoonIcon className="h-6 w-6" /> : <SunIcon className="h-6 w-6" />}
-            </button>
             <div className="relative">
               <button
                 ref={settingsButtonRef}
@@ -702,6 +712,29 @@ const App: React.FC = () => {
                       >
                         <HistoryIcon className="h-5 w-5" /> View Fetch History
                       </button>
+                    </div>
+                    <hr className="border-outline/30" />
+                    <div className="p-4">
+                      <h4 className="text-sm font-bold text-on-surface-variant mb-2 px-1">Theme</h4>
+                      <div className="grid grid-cols-3 gap-2 rounded-full bg-surface-variant p-1">
+                          {(['light', 'dark', 'system'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => handleThemeChange(mode)}
+                              className={`flex items-center justify-center gap-2 py-2 px-2 rounded-full text-sm font-semibold transition-colors ${
+                                themePreference === mode
+                                  ? 'bg-primary text-on-primary shadow'
+                                  : 'text-on-surface-variant hover:bg-on-surface/10'
+                              }`}
+                              aria-pressed={themePreference === mode}
+                            >
+                              {mode === 'light' && <SunIcon className="h-5 w-5" />}
+                              {mode === 'dark' && <MoonIcon className="h-5 w-5" />}
+                              {mode === 'system' && <DesktopIcon className="h-5 w-5" />}
+                              <span className="capitalize">{mode}</span>
+                            </button>
+                          ))}
+                      </div>
                     </div>
                     <hr className="border-outline/30" />
                     <div className="p-4">
