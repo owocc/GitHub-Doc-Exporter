@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { DocContent, GitHubUser } from './types';
+import { DocContent, GitHubUser, HistoryEntry } from './types';
 import { fetchRepoDocs, getUser } from './services/githubService';
+import { initDB, addHistory, getAllHistory, deleteHistory } from './services/dbService';
 import DocumentViewerModal from './components/AccordionItem';
 import ExportControls from './components/ExportControls';
 
@@ -78,6 +79,19 @@ const SettingsIcon: React.FC<{className?: string}> = ({className}) => (
     </svg>
 );
 
+const HistoryIcon: React.FC<{className?: string}> = ({className}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+        <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clipRule="evenodd" />
+    </svg>
+);
+
+const FolderOpenIcon: React.FC<{className?: string}> = ({className}) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+    <path d="M3.5 4A1.5 1.5 0 0 0 2 5.5v.756c0 .414.336.75.75.75h14.5a.75.75 0 0 0 .75-.75V5.5A1.5 1.5 0 0 0 16.5 4H10a.75.75 0 0 1-.53-.22L8.22 2.53A1.5 1.5 0 0 0 7.19 2H4.5A1.5 1.5 0 0 0 3.5 4Z" />
+    <path d="M2 9.5a.75.75 0 0 0 0 1.5h.005l.004 4.505A1.5 1.5 0 0 0 3.5 17h13a1.5 1.5 0 0 0 1.49-1.495l.004-4.505H18a.75.75 0 0 0 0-1.5H2Z" />
+  </svg>
+);
+
 
 const App: React.FC = () => {
   const [repoUrl, setRepoUrl] = useState<string>('https://github.com/tailwindlabs/tailwindcss.com/tree/main/src/docs');
@@ -90,6 +104,7 @@ const App: React.FC = () => {
   const [activeToken, setActiveToken] = useState<string | null>(null);
 
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState<boolean>(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState<boolean>(false);
   
   const [tokenInput, setTokenInput] = useState('');
@@ -114,8 +129,9 @@ const App: React.FC = () => {
 
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  // New state for document selection
   const [selectedDocPaths, setSelectedDocPaths] = useState<Set<string>>(new Set());
+  
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -158,8 +174,9 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Load tokens from localStorage on initial render
+  // Load tokens and history from storage on initial render
   useEffect(() => {
+    // Load tokens
     try {
       const storedTokensRaw = localStorage.getItem('github_tokens');
       const activeTokenRaw = localStorage.getItem('active_github_token');
@@ -174,6 +191,19 @@ const App: React.FC = () => {
       localStorage.removeItem('github_tokens');
       localStorage.removeItem('active_github_token');
     }
+    
+    // Load history
+    const loadHistory = async () => {
+      try {
+        await initDB();
+        const entries = await getAllHistory();
+        setHistoryEntries(entries);
+      } catch (error) {
+        console.error("Failed to load history from IndexedDB", error);
+        setError("Could not load fetch history from your browser's database.");
+      }
+    };
+    loadHistory();
   }, []);
 
 
@@ -278,12 +308,22 @@ const App: React.FC = () => {
       const depthToFetch = fetchSubdirectories ? maxDepth : 1;
       const docs = await fetchRepoDocs(repoUrl, activeToken, depthToFetch);
       setDocuments(docs);
+      
+      const newEntry: HistoryEntry = {
+        repoUrl,
+        repoName: repoName,
+        documents: docs,
+        timestamp: Date.now(),
+      };
+      const newId = await addHistory(newEntry);
+      setHistoryEntries(prev => [{ ...newEntry, id: newId }, ...prev]);
+
     } catch (e: any) {
       setError(e.message || 'An unknown error occurred.');
     } finally {
       setIsLoading(false);
     }
-  }, [repoUrl, activeToken, fetchSubdirectories, maxDepth]);
+  }, [repoUrl, activeToken, fetchSubdirectories, maxDepth, repoName]);
 
   const handleDownload = useCallback(async () => {
     if (selectedDocuments.length === 0) return;
@@ -364,6 +404,28 @@ const App: React.FC = () => {
     setDocuments([]);
     setError(null);
     setSelectedDocPaths(new Set());
+  };
+
+  const handleLoadFromHistory = (entry: HistoryEntry) => {
+    setRepoUrl(entry.repoUrl);
+    setDocuments(entry.documents);
+    setSelectedDocPaths(new Set());
+    setError(null);
+    setIsHistoryModalOpen(false);
+  };
+
+  const handleDeleteHistory = async (id: number | undefined) => {
+      if (id === undefined) return;
+      if (!window.confirm("Are you sure you want to delete this history entry? This cannot be undone.")) {
+          return;
+      }
+      try {
+        await deleteHistory(id);
+        setHistoryEntries(prev => prev.filter(entry => entry.id !== id));
+      } catch (error) {
+        console.error("Failed to delete history item:", error);
+        setError("Could not delete the history entry.");
+      }
   };
 
   const TokenManagerModal = () => (
@@ -452,9 +514,67 @@ const App: React.FC = () => {
     </div>
   );
 
+  const HistoryModal = () => (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" aria-labelledby="history-modal-title" role="dialog" aria-modal="true">
+        <div className="bg-surface rounded-3xl shadow-xl w-full max-w-2xl border border-outline/50 flex flex-col max-h-[90vh]">
+            <header className="flex justify-between items-center p-4 border-b border-outline/50 flex-shrink-0">
+                <h3 className="text-xl font-bold text-on-surface" id="history-modal-title">Fetch History</h3>
+                <button onClick={() => setIsHistoryModalOpen(false)} className="text-on-surface-variant hover:text-on-surface text-3xl leading-none">&times;</button>
+            </header>
+            <div className="p-6 overflow-y-auto">
+                {historyEntries.length === 0 ? (
+                    <div className="text-center p-6 rounded-xl bg-surface-variant">
+                        <HistoryIcon className="h-12 w-12 text-on-surface-variant mx-auto mb-4" />
+                        <h4 className="font-bold text-on-surface">No History Found</h4>
+                        <p className="text-on-surface-variant text-sm mt-1">Your fetch history will appear here after you successfully load docs from a repository.</p>
+                    </div>
+                ) : (
+                    <ul className="space-y-3">
+                        {historyEntries.map(entry => (
+                            <li key={entry.id} className="flex items-center gap-3 p-3 rounded-2xl border border-outline/50 bg-surface-variant/50 transition-shadow hover:shadow-md">
+                                <div className="flex-grow overflow-hidden">
+                                    <p className="font-bold text-on-surface truncate">{entry.repoName}</p>
+                                    <p className="text-xs text-on-surface-variant truncate font-mono">{entry.repoUrl}</p>
+                                    <p className="text-xs text-on-surface-variant mt-1">{new Date(entry.timestamp).toLocaleString()}</p>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    <button
+                                        onClick={() => handleLoadFromHistory(entry)}
+                                        className="inline-flex items-center justify-center gap-2 p-2 rounded-full text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
+                                        aria-label={`Load docs from ${entry.repoName}`}
+                                    >
+                                        <FolderOpenIcon className="h-5 w-5" />
+                                        <span>Load</span>
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteHistory(entry.id)}
+                                        className="p-2 rounded-full text-on-surface-variant hover:bg-error/20 hover:text-error transition-colors"
+                                        aria-label={`Delete history entry for ${entry.repoName}`}
+                                    >
+                                        <TrashIcon className="h-5 w-5" />
+                                    </button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+             <footer className="p-4 bg-surface-variant/50 border-t border-outline/50 flex justify-end flex-shrink-0">
+                 <button
+                    onClick={() => setIsHistoryModalOpen(false)}
+                    className="px-6 py-2 text-sm font-semibold rounded-full text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary"
+                >
+                    Close
+                </button>
+            </footer>
+        </div>
+    </div>
+  );
+
   return (
     <>
       {isTokenManagerOpen && <TokenManagerModal />}
+      {isHistoryModalOpen && <HistoryModal />}
       <DocumentViewerModal doc={selectedDoc} onClose={() => setSelectedDoc(null)} />
       <div className="container mx-auto px-4 py-8 md:py-12 max-w-4xl">
         <header className="mb-8 flex justify-between items-start gap-4">
@@ -522,6 +642,15 @@ const App: React.FC = () => {
                                         <GithubIcon className="h-5 w-5"/> Connect GitHub
                                     </button>
                                 )}
+                            </div>
+                            <hr className="border-outline/30" />
+                             <div className="p-4">
+                                <button
+                                    onClick={() => { setIsHistoryModalOpen(true); setIsSettingsPanelOpen(false); }}
+                                    className="w-full inline-flex items-center justify-center gap-3 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
+                                >
+                                    <HistoryIcon className="h-5 w-5"/> View Fetch History
+                                </button>
                             </div>
                             <hr className="border-outline/30" />
                             <div className="p-4">

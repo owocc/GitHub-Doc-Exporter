@@ -19,3 +19,11 @@ export interface GitHubUser {
   avatar_url: string;
   html_url: string;
 }
+
+export interface HistoryEntry {
+  id?: number;
+  repoUrl: string;
+  repoName: string;
+  documents: DocContent[];
+  timestamp: number;
+}
