@@ -551,7 +551,7 @@ const App: React.FC = () => {
                 className="flex-grow w-full bg-surface-variant border border-outline text-on-surface-variant placeholder:text-on-surface-variant rounded-full py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-colors"
                 disabled={isLoading}
               />
-              <div className="flex gap-2 w-full sm:w-auto">
+              <div className="flex flex-shrink-0 gap-2 w-full sm:w-auto">
                 <button
                     onClick={handleFetchDocs}
                     disabled={isLoading}
