@@ -126,6 +126,14 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('exportType');
     return saved === 'all' || saved === 'zip' ? saved : 'zip';
   });
+  const [mergeInZip, setMergeInZip] = useState<boolean>(() => {
+    const saved = localStorage.getItem('mergeInZip');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const [filesPerMergedFile, setFilesPerMergedFile] = useState<number>(() => {
+    const saved = localStorage.getItem('filesPerMergedFile');
+    return saved !== null ? JSON.parse(saved) : 10;
+  });
 
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
@@ -231,10 +239,12 @@ const App: React.FC = () => {
       localStorage.setItem('fetchSubdirectories', JSON.stringify(fetchSubdirectories));
       localStorage.setItem('maxDepth', JSON.stringify(maxDepth));
       localStorage.setItem('exportType', exportType);
+      localStorage.setItem('mergeInZip', JSON.stringify(mergeInZip));
+      localStorage.setItem('filesPerMergedFile', JSON.stringify(filesPerMergedFile));
     } catch (error) {
       console.error("Failed to save settings to localStorage:", error);
     }
-  }, [fetchSubdirectories, maxDepth, exportType]);
+  }, [fetchSubdirectories, maxDepth, exportType, mergeInZip, filesPerMergedFile]);
 
 
   const handleAddToken = async () => {
@@ -326,7 +336,9 @@ const App: React.FC = () => {
   }, [repoUrl, activeToken, fetchSubdirectories, maxDepth, repoName]);
 
   const handleDownload = useCallback(async () => {
-    if (selectedDocuments.length === 0) return;
+    const docsToExport = selectedDocuments.length > 0 ? selectedDocuments : documents;
+    if (docsToExport.length === 0) return;
+    
     setIsExporting(true);
 
     const downloadFile = (filename: string, content: string | Blob, mimeType: string) => {
@@ -343,13 +355,13 @@ const App: React.FC = () => {
 
     const createMergedContent = (docs: DocContent[]): string => {
       return docs
-        .map(doc => `[Source: ${doc.url}]\n\n${doc.content}`)
+        .map(doc => `## ${doc.name}\n[Source: ${doc.url}]\n\n${doc.content}`)
         .join('\n\n---\n\n');
     };
 
     try {
         if (exportType === 'all') {
-            const mergedContent = createMergedContent(selectedDocuments);
+            const mergedContent = createMergedContent(docsToExport);
             downloadFile(`${repoName}-docs.md`, mergedContent, 'text/markdown;charset=utf-8');
         } else { // 'zip'
             if (typeof JSZip === 'undefined') {
@@ -363,9 +375,39 @@ const App: React.FC = () => {
                 throw new Error("Could not create root folder in zip.");
             }
 
-            for(const doc of selectedDocuments) {
-                const fileContent = `[Source: ${doc.url}]\n\n${doc.content}`;
-                rootFolder.file(doc.path, fileContent);
+            if (mergeInZip && filesPerMergedFile > 0) {
+                const docsByDir = docsToExport.reduce((acc, doc) => {
+                    const lastSlash = doc.path.lastIndexOf('/');
+                    const dir = lastSlash === -1 ? '' : doc.path.substring(0, lastSlash);
+                    if (!acc[dir]) {
+                        acc[dir] = [];
+                    }
+                    acc[dir].push(doc);
+                    return acc;
+                }, {} as Record<string, DocContent[]>);
+
+                for (const dir in docsByDir) {
+                    const docsInDir = docsByDir[dir];
+                    const chunks: DocContent[][] = [];
+                    for (let i = 0; i < docsInDir.length; i += filesPerMergedFile) {
+                        chunks.push(docsInDir.slice(i, i + filesPerMergedFile));
+                    }
+
+                    chunks.forEach((chunk, index) => {
+                        const mergedContent = chunk
+                            .map(doc => `## ${doc.name}\n\n${doc.content}`)
+                            .join('\n\n---\n\n');
+                        
+                        const partFileName = `part_${index + 1}.md`;
+                        const filePath = dir ? `${dir}/${partFileName}` : partFileName;
+                        rootFolder.file(filePath, mergedContent);
+                    });
+                }
+            } else {
+                 for(const doc of docsToExport) {
+                    const fileContent = `## ${doc.name}\n[Source: ${doc.url}]\n\n${doc.content}`;
+                    rootFolder.file(doc.path, fileContent);
+                }
             }
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             downloadFile(`${repoName}-docs.zip`, zipBlob, 'application/zip');
@@ -376,7 +418,7 @@ const App: React.FC = () => {
     } finally {
         setIsExporting(false);
     }
-  }, [selectedDocuments, exportType, repoName]);
+  }, [selectedDocuments, documents, exportType, repoName, mergeInZip, filesPerMergedFile]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -661,6 +703,10 @@ const App: React.FC = () => {
                                     setFetchSubdirectories={setFetchSubdirectories}
                                     maxDepth={maxDepth}
                                     setMaxDepth={setMaxDepth}
+                                    mergeInZip={mergeInZip}
+                                    setMergeInZip={setMergeInZip}
+                                    filesPerMergedFile={filesPerMergedFile}
+                                    setFilesPerMergedFile={setFilesPerMergedFile}
                                 />
                             </div>
                         </div>
@@ -710,14 +756,14 @@ const App: React.FC = () => {
           {documents.length > 0 && (
             <div className="mt-8 bg-surface rounded-3xl border border-outline/30 overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-outline/30 flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="group flex items-center gap-3 flex-shrink-0">
                       <input
                           type="checkbox"
                           id="select-all-checkbox"
                           aria-label="Select all documents"
                           checked={documents.length > 0 && selectedDocPaths.size === documents.length}
                           onChange={handleSelectAll}
-                          className="h-5 w-5 rounded border-outline text-primary focus:ring-primary accent-primary bg-surface-variant"
+                          className="h-5 w-5 rounded border-outline text-primary focus:ring-primary accent-primary bg-surface-variant transition-opacity duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 checked:opacity-100"
                       />
                       <label htmlFor="select-all-checkbox" className="text-lg sm:text-xl font-bold text-on-surface cursor-pointer whitespace-nowrap">
                           {selectedDocPaths.size > 0 ? `${selectedDocPaths.size} of ${documents.length} selected` : `Found ${documents.length} documents`}
@@ -726,11 +772,11 @@ const App: React.FC = () => {
                   <div className="flex-grow flex justify-start sm:justify-end">
                       <button
                           onClick={handleDownload}
-                          disabled={isExporting || selectedDocuments.length === 0}
+                          disabled={isExporting || documents.length === 0}
                           className="inline-flex justify-center items-center gap-2 px-5 py-2.5 border border-transparent text-sm font-bold rounded-full text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                           {isExporting ? <LoadingSpinner className="h-5 w-5" /> : <DownloadIcon className="h-5 w-5" />}
-                          Export Selected
+                          {selectedDocPaths.size > 0 ? `Export ${selectedDocPaths.size} Selected` : `Export All (${documents.length})`}
                       </button>
                   </div>
               </div>
