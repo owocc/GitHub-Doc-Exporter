@@ -816,7 +816,7 @@ const App: React.FC = () => {
 
           {documents.length > 0 && (
             <div className="mt-8 bg-surface rounded-3xl border border-outline/30 overflow-hidden">
-              <div className="p-4 sm:p-6 border-b border-outline/30 flex flex-wrap items-center justify-between gap-4">
+              <div className="p-4 sm:py-6 border-b border-outline/30 flex flex-wrap items-center justify-between gap-4">
                 <div className="group flex items-center gap-3 flex-shrink-0" onMouseOverCapture={() => { }} onFocusCapture={() => { }}>
                   <input
                     type="checkbox"
