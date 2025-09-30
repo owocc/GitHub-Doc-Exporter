@@ -1,8 +1,28 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { DocContent, GitHubUser } from './types';
 import { fetchRepoDocs, getUser } from './services/githubService';
 import DocumentViewerModal from './components/AccordionItem';
 import ExportControls from './components/ExportControls';
+
+// --- NEW TYPES ---
+interface StoredToken {
+  token: string;
+  user: GitHubUser;
+}
+
+// --- NEW ICONS ---
+const TrashIcon: React.FC<{className?: string}> = ({className}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+      <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.046A12.705 12.705 0 0 1 4.25 6.75v8.5A2.75 2.75 0 0 0 7 18h6a2.75 2.75 0 0 0 2.75-2.75v-8.5a12.705 12.705 0 0 1 .237-1.654l.15-.046a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+    </svg>
+);
+
+const PlusIcon: React.FC<{className?: string}> = ({className}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+      <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+    </svg>
+);
+
 
 const GithubIcon: React.FC<{className?: string}> = ({className}) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className={className}>
@@ -42,6 +62,13 @@ const MoonIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const SettingsIcon: React.FC<{className?: string}> = ({className}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.438.995s.145.755.438.995l1.003.827c.424.35.534.954.26 1.431l-1.296 2.247a1.125 1.125 0 01-1.37.49l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.52 6.52 0 01-.22-.127c-.324-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.437-.995s-.145-.755-.437-.995l-1.004-.827a1.125 1.125 0 01-.26-1.431l1.296-2.247a1.125 1.125 0 011.37-.49l1.217.456c.355.133.75.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+);
+
 
 const App: React.FC = () => {
   const [repoUrl, setRepoUrl] = useState<string>('https://github.com/tailwindlabs/tailwindcss.com/tree/main/src/docs');
@@ -49,14 +76,27 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<DocContent | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<GitHubUser | null>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  
+  const [savedTokens, setSavedTokens] = useState<StoredToken[]>([]);
+  const [activeToken, setActiveToken] = useState<string | null>(null);
+
+  const [isTokenManagerOpen, setIsTokenManagerOpen] = useState<boolean>(false);
+  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState<boolean>(false);
+  
   const [tokenInput, setTokenInput] = useState('');
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isVerifyingToken, setIsVerifyingToken] = useState(false);
+  
   const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'light');
   
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+
+  const activeUser = useMemo(() => {
+    if (!activeToken) return null;
+    return savedTokens.find(st => st.token === activeToken)?.user || null;
+  }, [activeToken, savedTokens]);
+
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
@@ -80,46 +120,102 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleVerifyToken = async (tokenToVerify: string) => {
-    if (!tokenToVerify) {
+  // Load tokens from localStorage on initial render
+  useEffect(() => {
+    try {
+      const storedTokensRaw = localStorage.getItem('github_tokens');
+      const activeTokenRaw = localStorage.getItem('active_github_token');
+      if (storedTokensRaw) {
+        setSavedTokens(JSON.parse(storedTokensRaw));
+      }
+      if (activeTokenRaw) {
+        setActiveToken(activeTokenRaw);
+      }
+    } catch (e) {
+      console.error("Failed to parse tokens from localStorage", e);
+      localStorage.removeItem('github_tokens');
+      localStorage.removeItem('active_github_token');
+    }
+  }, []);
+
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isSettingsPanelOpen &&
+        settingsPanelRef.current &&
+        !settingsPanelRef.current.contains(event.target as Node) &&
+        settingsButtonRef.current &&
+        !settingsButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsSettingsPanelOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSettingsPanelOpen]);
+
+
+  const handleAddToken = async () => {
+    if (!tokenInput) {
         setTokenError("Token cannot be empty.");
         return;
     }
+    if (savedTokens.some(st => st.token === tokenInput)) {
+        setTokenError("This token has already been added.");
+        return;
+    }
+
     setTokenError(null);
     setIsVerifyingToken(true);
     try {
-        const userData = await getUser(tokenToVerify);
-        setUser(userData);
-        setToken(tokenToVerify);
-        localStorage.setItem('github_token', tokenToVerify);
-        setIsAuthModalOpen(false);
+        const userData = await getUser(tokenInput);
+        const newToken: StoredToken = { token: tokenInput, user: userData };
+        const newSavedTokens = [...savedTokens, newToken];
+        setSavedTokens(newSavedTokens);
+        setActiveToken(tokenInput);
+
+        localStorage.setItem('github_tokens', JSON.stringify(newSavedTokens));
+        localStorage.setItem('active_github_token', tokenInput);
+        
         setTokenInput('');
+        // Optional: close modal on success
+        // setIsTokenManagerOpen(false);
     } catch (e: any) {
         setTokenError(e.message || "An unknown error occurred.");
-        setUser(null);
-        setToken(null);
-        localStorage.removeItem('github_token');
     } finally {
         setIsVerifyingToken(false);
     }
   };
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem('github_token');
-    if (storedToken) {
-        getUser(storedToken).then(userData => {
-            setUser(userData);
-            setToken(storedToken);
-        }).catch(() => {
-            localStorage.removeItem('github_token');
-        });
+  const handleSetActiveToken = (token: string) => {
+    setActiveToken(token);
+    localStorage.setItem('active_github_token', token);
+  };
+  
+  const handleDeleteToken = (tokenToDelete: string) => {
+    if (!window.confirm(`Are you sure you want to delete the token for user "${savedTokens.find(st => st.token === tokenToDelete)?.user.login}"?`)) {
+        return;
     }
-  }, []);
+
+    const newSavedTokens = savedTokens.filter(st => st.token !== tokenToDelete);
+    setSavedTokens(newSavedTokens);
+    localStorage.setItem('github_tokens', JSON.stringify(newSavedTokens));
+    
+    if (activeToken === tokenToDelete) {
+        // If the active token was deleted, deactivate it
+        setActiveToken(null);
+        localStorage.removeItem('active_github_token');
+    }
+  };
+
 
   const handleLogout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('github_token');
+    setActiveToken(null);
+    localStorage.removeItem('active_github_token');
+    setIsSettingsPanelOpen(false);
   };
 
   const handleFetchDocs = useCallback(async () => {
@@ -132,14 +228,14 @@ const App: React.FC = () => {
     setDocuments([]);
 
     try {
-      const docs = await fetchRepoDocs(repoUrl, token);
+      const docs = await fetchRepoDocs(repoUrl, activeToken);
       setDocuments(docs);
     } catch (e: any) {
       setError(e.message || 'An unknown error occurred.');
     } finally {
       setIsLoading(false);
     }
-  }, [repoUrl, token]);
+  }, [repoUrl, activeToken]);
   
   const handleClear = () => {
     setRepoUrl('');
@@ -147,56 +243,95 @@ const App: React.FC = () => {
     setError(null);
   };
 
-  const AuthModal = () => (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div className="bg-surface rounded-3xl shadow-xl p-6 w-full max-w-md border border-outline/50">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-on-surface" id="modal-title">Connect to GitHub</h3>
-                <button onClick={() => setIsAuthModalOpen(false)} className="text-on-surface-variant hover:text-on-surface text-3xl leading-none">&times;</button>
+  const TokenManagerModal = () => (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" aria-labelledby="token-manager-title" role="dialog" aria-modal="true">
+        <div className="bg-surface rounded-3xl shadow-xl w-full max-w-lg border border-outline/50 flex flex-col max-h-[90vh]">
+            <header className="flex justify-between items-center p-4 border-b border-outline/50 flex-shrink-0">
+                <h3 className="text-xl font-bold text-on-surface" id="token-manager-title">Manage GitHub Tokens</h3>
+                <button onClick={() => setIsTokenManagerOpen(false)} className="text-on-surface-variant hover:text-on-surface text-3xl leading-none">&times;</button>
+            </header>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+                 {savedTokens.length === 0 ? (
+                    <div className="text-center p-4 rounded-xl bg-surface-variant">
+                        <p className="text-on-surface-variant text-sm mb-4">You don't have any GitHub tokens saved. Add one to increase API rate limits and access private repositories.</p>
+                        <a href="https://github.com/settings/tokens/new?scopes=repo&description=GitHub%20Doc%20Exporter" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline font-semibold">
+                            Click here to create a new token on GitHub.
+                        </a>
+                    </div>
+                ) : (
+                    <div>
+                        <h4 className="font-bold text-on-surface mb-3">Saved Tokens</h4>
+                        <p className="text-sm text-on-surface-variant mb-4">Select a token to make it active for the current session.</p>
+                        <div className="space-y-3">
+                            {savedTokens.map((st) => (
+                                <div key={st.token} className="flex items-center gap-3 p-3 rounded-2xl border border-outline/50 bg-surface-variant/50">
+                                    <input
+                                        type="radio"
+                                        name="active-token"
+                                        id={`token-${st.user.login}`}
+                                        checked={activeToken === st.token}
+                                        onChange={() => handleSetActiveToken(st.token)}
+                                        className="h-5 w-5 accent-primary focus:ring-primary focus:ring-offset-surface-variant"
+                                    />
+                                    <label htmlFor={`token-${st.user.login}`} className="flex-grow flex items-center gap-3 cursor-pointer">
+                                        <img src={st.user.avatar_url} alt={st.user.login} className="h-10 w-10 rounded-full"/>
+                                        <div className="flex-grow">
+                                            <p className="font-semibold text-on-surface">{st.user.login}</p>
+                                            <p className="text-xs text-on-surface-variant font-mono">ghp_...{st.token.slice(-4)}</p>
+                                        </div>
+                                    </label>
+                                    <button onClick={() => handleDeleteToken(st.token)} className="p-2 rounded-full text-on-surface-variant hover:bg-error/20 hover:text-error transition-colors" aria-label={`Delete token for ${st.user.login}`}>
+                                        <TrashIcon className="h-5 w-5" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                 )}
+
+                <div>
+                    <h4 className="font-bold text-on-surface mb-3 pt-4 border-t border-outline/30">Add New Token</h4>
+                    <div className="flex items-start gap-2">
+                        <div className="flex-grow">
+                            <label htmlFor="token-input" className="sr-only">New GitHub Token</label>
+                            <input
+                                id="token-input"
+                                type="password"
+                                value={tokenInput}
+                                onChange={(e) => setTokenInput(e.target.value)}
+                                placeholder="Paste new token (ghp_...)"
+                                className="w-full bg-surface-variant border border-outline text-on-surface-variant placeholder:text-on-surface-variant rounded-full py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm"
+                            />
+                             {tokenError && <p className="text-error text-sm mt-2 ml-2">{tokenError}</p>}
+                        </div>
+                        <button
+                            onClick={handleAddToken}
+                            disabled={isVerifyingToken}
+                            className="inline-flex justify-center items-center gap-2 px-4 py-2.5 border border-transparent text-sm font-semibold rounded-full shadow-sm text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isVerifyingToken ? <LoadingSpinner className="h-5 w-5"/> : <PlusIcon className="h-5 w-5"/>}
+                            <span>Add</span>
+                        </button>
+                    </div>
+                </div>
             </div>
-            <p className="text-sm text-on-surface-variant mb-4">
-                Provide a Personal Access Token to increase API rate limits and access private repositories.
-            </p>
-            <a href="https://github.com/settings/tokens/new?scopes=repo&description=GitHub%20Doc%20Exporter" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline mb-4 inline-block font-semibold">
-                Create a new token here.
-            </a>
-             <div className="text-xs text-on-surface-variant bg-surface-variant p-3 rounded-lg mb-4">
-                We recommend the <code className="text-xs bg-outline/20 px-1 py-0.5 rounded">repo</code> scope for private docs. Your token is only stored in your browser.
-            </div>
-            <div>
-                <label htmlFor="token-input" className="sr-only">GitHub Token</label>
-                <input
-                    id="token-input"
-                    type="password"
-                    value={tokenInput}
-                    onChange={(e) => setTokenInput(e.target.value)}
-                    placeholder="ghp_..."
-                    className="w-full bg-surface-variant border border-outline text-on-surface-variant placeholder:text-on-surface-variant rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm"
-                />
-            </div>
-            {tokenError && <p className="text-error text-sm mt-2">{tokenError}</p>}
-            <div className="mt-6 flex justify-end gap-3">
-                <button
-                    onClick={() => setIsAuthModalOpen(false)}
-                    className="px-6 py-2 text-sm font-semibold rounded-full text-on-surface-variant bg-surface-variant hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-outline"
+
+            <footer className="p-4 bg-surface-variant/50 border-t border-outline/50 flex justify-end flex-shrink-0">
+                 <button
+                    onClick={() => setIsTokenManagerOpen(false)}
+                    className="px-6 py-2 text-sm font-semibold rounded-full text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary"
                 >
-                    Cancel
+                    Done
                 </button>
-                <button
-                    onClick={() => handleVerifyToken(tokenInput)}
-                    disabled={isVerifyingToken}
-                    className="inline-flex justify-center items-center px-6 py-2 border border-transparent text-sm font-semibold rounded-full shadow-sm text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isVerifyingToken ? <><LoadingSpinner className="h-4 w-4 mr-2"/> Verifying...</> : 'Save & Connect'}
-                </button>
-            </div>
+            </footer>
         </div>
     </div>
   );
 
   return (
     <>
-      {isAuthModalOpen && <AuthModal />}
+      {isTokenManagerOpen && <TokenManagerModal />}
       <DocumentViewerModal doc={selectedDoc} onClose={() => setSelectedDoc(null)} />
       <div className="container mx-auto px-4 py-8 md:py-12 max-w-4xl">
         <header className="mb-8 flex justify-between items-start gap-4">
@@ -213,22 +348,69 @@ const App: React.FC = () => {
                 <button onClick={toggleTheme} className="p-2 rounded-full text-on-surface-variant hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-primary">
                     {theme === 'light' ? <MoonIcon className="h-6 w-6" /> : <SunIcon className="h-6 w-6" />}
                 </button>
-                {user ? (
-                    <div className="flex items-center gap-3">
-                        <img src={user.avatar_url} alt={user.login} className="h-10 w-10 rounded-full border-2 border-outline/50"/>
-                        <div className="hidden sm:block">
-                            <a href={user.html_url} target="_blank" rel="noopener noreferrer" className="text-on-surface font-semibold hover:underline">{user.login}</a>
-                            <button onClick={handleLogout} className="text-xs text-on-surface-variant hover:text-primary block text-left">Logout</button>
+                <div className="relative">
+                     <button
+                        ref={settingsButtonRef}
+                        onClick={() => setIsSettingsPanelOpen(prev => !prev)}
+                        className="rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary"
+                     >
+                        {activeUser ? (
+                            <img src={activeUser.avatar_url} alt={activeUser.login} className="h-10 w-10 rounded-full border-2 border-outline/50"/>
+                        ) : (
+                           <div className="h-10 w-10 rounded-full border-2 border-outline/50 bg-surface-variant flex items-center justify-center">
+                               <SettingsIcon className="h-6 w-6 text-on-surface-variant"/>
+                           </div>
+                        )}
+                     </button>
+                     {isSettingsPanelOpen && (
+                        <div ref={settingsPanelRef} className="absolute top-full right-0 mt-2 w-80 bg-surface rounded-3xl shadow-xl border border-outline/30 z-20">
+                            <div className="p-4">
+                               {activeUser && activeToken ? (
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <img src={activeUser.avatar_url} alt={activeUser.login} className="h-10 w-10 rounded-full"/>
+                                            <div>
+                                                <a href={activeUser.html_url} target="_blank" rel="noopener noreferrer" className="text-on-surface font-semibold hover:underline">{activeUser.login}</a>
+                                                <p className="text-xs text-on-surface-variant truncate">
+                                                    Active Token: <code className="font-mono bg-outline/20 px-1 py-0.5 rounded">{`ghp_...${activeToken.slice(-4)}`}</code>
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end items-center gap-4">
+                                            <button 
+                                                onClick={() => {
+                                                    setIsTokenManagerOpen(true);
+                                                    setIsSettingsPanelOpen(false);
+                                                }}
+                                                className="text-sm font-semibold text-primary hover:underline focus:outline-none"
+                                            >
+                                                Manage Tokens
+                                            </button>
+                                            <button onClick={handleLogout} className="text-sm font-semibold text-primary hover:underline focus:outline-none">
+                                                Logout
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => { setIsTokenManagerOpen(true); setIsSettingsPanelOpen(false); }}
+                                        className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
+                                    >
+                                        <GithubIcon className="h-5 w-5"/> Connect GitHub
+                                    </button>
+                                )}
+                            </div>
+                             {documents.length > 0 && (
+                                <>
+                                    <hr className="border-outline/30" />
+                                    <div className="p-4">
+                                        <ExportControls documents={documents} />
+                                    </div>
+                                </>
+                             )}
                         </div>
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => { setIsAuthModalOpen(true); setTokenError(null); }}
-                        className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 border border-outline text-sm font-bold rounded-full text-on-surface bg-surface hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary transition-colors"
-                    >
-                        <GithubIcon className="h-5 w-5"/> Connect GitHub
-                    </button>
-                )}
+                     )}
+                </div>
             </div>
         </header>
 
@@ -293,9 +475,6 @@ const App: React.FC = () => {
             </div>
           )}
           
-          {documents.length > 0 && (
-              <ExportControls documents={documents} />
-          )}
         </main>
       </div>
     </>

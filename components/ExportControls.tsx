@@ -31,6 +31,7 @@ const ExportControls: React.FC<ExportControlsProps> = ({ documents }) => {
   };
 
   const handleDownload = async () => {
+    if (documents.length === 0) return;
     setIsExporting(true);
     try {
         if (exportType === 'all') {
@@ -65,8 +66,8 @@ const ExportControls: React.FC<ExportControlsProps> = ({ documents }) => {
   };
 
   return (
-    <div className="bg-surface rounded-3xl p-6 mt-8 border border-outline/30">
-      <h3 className="text-xl font-bold mb-4 text-on-surface">Export Options</h3>
+    <div>
+      <h3 className="text-lg font-bold mb-4 text-on-surface">Export Options</h3>
       <div className="space-y-4">
         <div>
           <label className="flex items-center cursor-pointer">
@@ -118,7 +119,7 @@ const ExportControls: React.FC<ExportControlsProps> = ({ documents }) => {
       <div className="mt-6">
         <button
           onClick={handleDownload}
-          disabled={isExporting}
+          disabled={isExporting || documents.length === 0}
           className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-semibold rounded-full shadow-sm text-on-primary bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isExporting ? 'Exporting...' : 'Download'}
