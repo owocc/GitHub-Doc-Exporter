@@ -285,7 +285,7 @@ const App: React.FC = () => {
     }
   }, [repoUrl, activeToken, fetchSubdirectories, maxDepth]);
 
-  const handleDownload = async () => {
+  const handleDownload = useCallback(async () => {
     if (selectedDocuments.length === 0) return;
     setIsExporting(true);
 
@@ -336,7 +336,7 @@ const App: React.FC = () => {
     } finally {
         setIsExporting(false);
     }
-  };
+  }, [selectedDocuments, exportType, repoName]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
