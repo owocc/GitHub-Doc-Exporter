@@ -129,6 +129,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('exportType');
     return saved === 'all' || saved === 'zip' ? saved : 'zip';
   });
+  const [zipExportMode, setZipExportMode] = useState<'preserve' | 'flat'>(() => {
+    const saved = localStorage.getItem('zipExportMode');
+    return saved === 'preserve' || saved === 'flat' ? saved : 'preserve';
+  });
   const [mergeInZip, setMergeInZip] = useState<boolean>(() => {
     const saved = localStorage.getItem('mergeInZip');
     return saved !== null ? JSON.parse(saved) : false;
@@ -226,12 +230,13 @@ const App: React.FC = () => {
       localStorage.setItem('fetchSubdirectories', JSON.stringify(fetchSubdirectories));
       localStorage.setItem('maxDepth', JSON.stringify(maxDepth));
       localStorage.setItem('exportType', exportType);
+      localStorage.setItem('zipExportMode', zipExportMode);
       localStorage.setItem('mergeInZip', JSON.stringify(mergeInZip));
       localStorage.setItem('filesPerMergedFile', JSON.stringify(filesPerMergedFile));
     } catch (error) {
       console.error("Failed to save settings to localStorage:", error);
     }
-  }, [fetchSubdirectories, maxDepth, exportType, mergeInZip, filesPerMergedFile]);
+  }, [fetchSubdirectories, maxDepth, exportType, zipExportMode, mergeInZip, filesPerMergedFile]);
 
 
   const handleAddToken = async () => {
@@ -366,37 +371,53 @@ const App: React.FC = () => {
         }
 
         if (mergeInZip && filesPerMergedFile > 0) {
-          const docsByDir = docsToExport.reduce((acc, doc) => {
-            const lastSlash = doc.path.lastIndexOf('/');
-            const dir = lastSlash === -1 ? '' : doc.path.substring(0, lastSlash);
-            if (!acc[dir]) {
-              acc[dir] = [];
+           if (zipExportMode === 'flat') {
+                const chunks: DocContent[][] = [];
+                for (let i = 0; i < docsToExport.length; i += filesPerMergedFile) {
+                    chunks.push(docsToExport.slice(i, i + filesPerMergedFile));
+                }
+
+                chunks.forEach((chunk, index) => {
+                    const mergedContent = chunk
+                        .map(doc => `## ${doc.name}\n\n${doc.content}`)
+                        .join('\n\n---\n\n');
+                    const partFileName = `part_${index + 1}.md`;
+                    rootFolder.file(partFileName, mergedContent);
+                });
+            } else { // preserve
+                const docsByDir = docsToExport.reduce((acc, doc) => {
+                    const lastSlash = doc.path.lastIndexOf('/');
+                    const dir = lastSlash === -1 ? '' : doc.path.substring(0, lastSlash);
+                    if (!acc[dir]) {
+                    acc[dir] = [];
+                    }
+                    acc[dir].push(doc);
+                    return acc;
+                }, {} as Record<string, DocContent[]>);
+
+                for (const dir in docsByDir) {
+                    const docsInDir = docsByDir[dir];
+                    const chunks: DocContent[][] = [];
+                    for (let i = 0; i < docsInDir.length; i += filesPerMergedFile) {
+                    chunks.push(docsInDir.slice(i, i + filesPerMergedFile));
+                    }
+
+                    chunks.forEach((chunk, index) => {
+                    const mergedContent = chunk
+                        .map(doc => `## ${doc.name}\n\n${doc.content}`)
+                        .join('\n\n---\n\n');
+
+                    const partFileName = `part_${index + 1}.md`;
+                    const filePath = dir ? `${dir}/${partFileName}` : partFileName;
+                    rootFolder.file(filePath, mergedContent);
+                    });
+                }
             }
-            acc[dir].push(doc);
-            return acc;
-          }, {} as Record<string, DocContent[]>);
-
-          for (const dir in docsByDir) {
-            const docsInDir = docsByDir[dir];
-            const chunks: DocContent[][] = [];
-            for (let i = 0; i < docsInDir.length; i += filesPerMergedFile) {
-              chunks.push(docsInDir.slice(i, i + filesPerMergedFile));
-            }
-
-            chunks.forEach((chunk, index) => {
-              const mergedContent = chunk
-                .map(doc => `## ${doc.name}\n\n${doc.content}`)
-                .join('\n\n---\n\n');
-
-              const partFileName = `part_${index + 1}.md`;
-              const filePath = dir ? `${dir}/${partFileName}` : partFileName;
-              rootFolder.file(filePath, mergedContent);
-            });
-          }
         } else {
           for (const doc of docsToExport) {
             const fileContent = `## ${doc.name}\n[Source: ${doc.url}]\n\n${doc.content}`;
-            rootFolder.file(doc.path, fileContent);
+            const filePath = zipExportMode === 'flat' ? doc.path.replace(/\//g, '_') : doc.path;
+            rootFolder.file(filePath, fileContent);
           }
         }
         const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -408,7 +429,7 @@ const App: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [selectedDocPaths, selectedDocuments, documents, exportType, repoName, mergeInZip, filesPerMergedFile]);
+  }, [selectedDocPaths, selectedDocuments, documents, exportType, repoName, mergeInZip, filesPerMergedFile, zipExportMode]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -749,6 +770,8 @@ const App: React.FC = () => {
                         setMergeInZip={setMergeInZip}
                         filesPerMergedFile={filesPerMergedFile}
                         setFilesPerMergedFile={setFilesPerMergedFile}
+                        zipExportMode={zipExportMode}
+                        setZipExportMode={setZipExportMode}
                       />
                     </div>
                   </div>

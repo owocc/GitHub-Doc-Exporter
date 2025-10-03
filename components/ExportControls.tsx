@@ -37,6 +37,8 @@ interface ExportControlsProps {
   setMergeInZip: (value: boolean) => void;
   filesPerMergedFile: number;
   setFilesPerMergedFile: (value: number) => void;
+  zipExportMode: 'preserve' | 'flat';
+  setZipExportMode: (mode: 'preserve' | 'flat') => void;
 }
 
 const ExportControls: React.FC<ExportControlsProps> = ({
@@ -50,6 +52,8 @@ const ExportControls: React.FC<ExportControlsProps> = ({
   setMergeInZip,
   filesPerMergedFile,
   setFilesPerMergedFile,
+  zipExportMode,
+  setZipExportMode,
 }) => {
   return (
     <div>
@@ -98,25 +102,41 @@ const ExportControls: React.FC<ExportControlsProps> = ({
             </div>
             <div className="flex-grow py-1">
               <span className="text-sm font-medium text-on-surface">
-                Zip archive (preserves folders)
+                Zip archive
               </span>
               {exportType === 'zip' && (
-                <div className="pl-1 mt-3 space-y-3">
-                  <label className="flex items-center cursor-pointer">
-                    <input type="checkbox" checked={mergeInZip} onChange={e => setMergeInZip(e.target.checked)} className="h-4 w-4 rounded border-outline text-primary focus:ring-primary accent-primary bg-surface-variant mr-2" />
-                    <span className="text-sm text-on-surface-variant">Merge files within zip</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="files-per-merge-input" className="text-sm text-on-surface-variant">Files per merge:</label>
-                    <input
-                      id="files-per-merge-input"
-                      type="number"
-                      min="1"
-                      value={filesPerMergedFile}
-                      onChange={(e) => setFilesPerMergedFile(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      disabled={!mergeInZip}
-                      className="w-20 bg-surface-variant border border-outline text-on-surface-variant rounded-lg py-1 px-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm disabled:opacity-50"
-                    />
+                <div className="pl-1 mt-3 space-y-4">
+                  <div>
+                    <p className="text-sm text-on-surface-variant font-medium mb-2">Folder Structure</p>
+                    <div className="space-y-1">
+                        <label className="flex items-center cursor-pointer">
+                            <input type="radio" name="zip-structure" value="preserve" checked={zipExportMode === 'preserve'} onChange={() => setZipExportMode('preserve')} className="h-4 w-4 border-outline text-primary focus:ring-primary accent-primary bg-surface-variant mr-2" />
+                            <span className="text-sm text-on-surface-variant">Preserve folder structure</span>
+                        </label>
+                        <label className="flex items-center cursor-pointer">
+                            <input type="radio" name="zip-structure" value="flat" checked={zipExportMode === 'flat'} onChange={() => setZipExportMode('flat')} className="h-4 w-4 border-outline text-primary focus:ring-primary accent-primary bg-surface-variant mr-2" />
+                            <span className="text-sm text-on-surface-variant">Flat (no folders)</span>
+                        </label>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input type="checkbox" checked={mergeInZip} onChange={e => setMergeInZip(e.target.checked)} className="h-4 w-4 rounded border-outline text-primary focus:ring-primary accent-primary bg-surface-variant mr-2" />
+                      <span className="text-sm text-on-surface-variant">Merge files within zip</span>
+                    </label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <label htmlFor="files-per-merge-input" className="text-sm text-on-surface-variant">Files per merge:</label>
+                      <input
+                        id="files-per-merge-input"
+                        type="number"
+                        min="1"
+                        value={filesPerMergedFile}
+                        onChange={(e) => setFilesPerMergedFile(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        disabled={!mergeInZip}
+                        className="w-20 bg-surface-variant border border-outline text-on-surface-variant rounded-lg py-1 px-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm disabled:opacity-50"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
