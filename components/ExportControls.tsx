@@ -39,6 +39,10 @@ interface ExportControlsProps {
   setFilesPerMergedFile: (value: number) => void;
   zipExportMode: 'preserve' | 'flat';
   setZipExportMode: (mode: 'preserve' | 'flat') => void;
+  changeExtension: boolean;
+  setChangeExtension: (value: boolean) => void;
+  newExtension: string;
+  setNewExtension: (value: string) => void;
 }
 
 const ExportControls: React.FC<ExportControlsProps> = ({
@@ -54,6 +58,10 @@ const ExportControls: React.FC<ExportControlsProps> = ({
   setFilesPerMergedFile,
   zipExportMode,
   setZipExportMode,
+  changeExtension,
+  setChangeExtension,
+  newExtension,
+  setNewExtension,
 }) => {
   return (
     <div>
@@ -85,6 +93,30 @@ const ExportControls: React.FC<ExportControlsProps> = ({
 
       <div>
         <h3 className="text-md font-bold mb-3 text-on-surface">Export Options</h3>
+        <div className="space-y-2 mb-4">
+            <label className="flex items-center cursor-pointer justify-between">
+                <span className="text-sm font-medium text-on-surface">
+                Change file extension
+                </span>
+                <div className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked={changeExtension} onChange={e => setChangeExtension(e.target.checked)} className="sr-only peer" />
+                <div className="w-11 h-6 bg-surface-variant peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </div>
+            </label>
+            <div className="pl-4 mt-2 flex items-center gap-1">
+                <label htmlFor="new-extension-input" className="text-sm text-on-surface-variant">New extension:</label>
+                <span className="text-sm text-on-surface-variant font-mono">.</span>
+                <input
+                id="new-extension-input"
+                type="text"
+                value={newExtension}
+                onChange={(e) => setNewExtension(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                placeholder="md"
+                disabled={!changeExtension}
+                className="w-20 bg-surface-variant border border-outline text-on-surface-variant rounded-lg py-1 px-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm disabled:opacity-50"
+                />
+            </div>
+        </div>
         <div className="space-y-3">
           <label className="flex items-start cursor-pointer">
             <input

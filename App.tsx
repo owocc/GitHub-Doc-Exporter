@@ -141,6 +141,14 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('filesPerMergedFile');
     return saved !== null ? JSON.parse(saved) : 10;
   });
+   const [changeExtension, setChangeExtension] = useState<boolean>(() => {
+    const saved = localStorage.getItem('changeExtension');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const [newExtension, setNewExtension] = useState<string>(() => {
+    const saved = localStorage.getItem('newExtension');
+    return saved !== null ? JSON.parse(saved) : 'md';
+  });
 
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
@@ -233,10 +241,12 @@ const App: React.FC = () => {
       localStorage.setItem('zipExportMode', zipExportMode);
       localStorage.setItem('mergeInZip', JSON.stringify(mergeInZip));
       localStorage.setItem('filesPerMergedFile', JSON.stringify(filesPerMergedFile));
+      localStorage.setItem('changeExtension', JSON.stringify(changeExtension));
+      localStorage.setItem('newExtension', newExtension);
     } catch (error) {
       console.error("Failed to save settings to localStorage:", error);
     }
-  }, [fetchSubdirectories, maxDepth, exportType, zipExportMode, mergeInZip, filesPerMergedFile]);
+  }, [fetchSubdirectories, maxDepth, exportType, zipExportMode, mergeInZip, filesPerMergedFile, changeExtension, newExtension]);
 
 
   const handleAddToken = async () => {
@@ -336,6 +346,24 @@ const App: React.FC = () => {
 
     setIsExporting(true);
 
+    const changeFileNameExtension = (originalPath: string): string => {
+        if (!changeExtension || !newExtension.trim()) {
+            return originalPath;
+        }
+        const sanitizedExtension = newExtension.trim().replace(/^\./, '');
+        if (!sanitizedExtension) return originalPath;
+
+        const lastDotIndex = originalPath.lastIndexOf('.');
+        const lastSlashIndex = originalPath.lastIndexOf('/');
+
+        if (lastDotIndex > -1 && lastDotIndex > lastSlashIndex) {
+            const pathWithoutExtension = originalPath.substring(0, lastDotIndex);
+            return `${pathWithoutExtension}.${sanitizedExtension}`;
+        }
+        
+        return `${originalPath}.${sanitizedExtension}`;
+    };
+
     const downloadFile = (filename: string, content: string | Blob, mimeType: string) => {
       const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
       const url = URL.createObjectURL(blob);
@@ -357,7 +385,9 @@ const App: React.FC = () => {
     try {
       if (exportType === 'all') {
         const mergedContent = createMergedContent(docsToExport);
-        downloadFile(`${repoName}-docs.md`, mergedContent, 'text/markdown;charset=utf-8');
+        const sanitizedExtension = newExtension.trim().replace(/^\./, '');
+        const finalExtension = changeExtension && sanitizedExtension ? sanitizedExtension : 'md';
+        downloadFile(`${repoName}-docs.${finalExtension}`, mergedContent, 'text/markdown;charset=utf-8');
       } else { // 'zip'
         if (typeof JSZip === 'undefined') {
           alert('JSZip library is not loaded. Cannot create zip file.');
@@ -381,7 +411,7 @@ const App: React.FC = () => {
                     const mergedContent = chunk
                         .map(doc => `## ${doc.name}\n\n${doc.content}`)
                         .join('\n\n---\n\n');
-                    const partFileName = `part_${index + 1}.md`;
+                    const partFileName = changeFileNameExtension(`part_${index + 1}.md`);
                     rootFolder.file(partFileName, mergedContent);
                 });
             } else { // preserve
@@ -403,21 +433,22 @@ const App: React.FC = () => {
                     }
 
                     chunks.forEach((chunk, index) => {
-                    const mergedContent = chunk
-                        .map(doc => `## ${doc.name}\n\n${doc.content}`)
-                        .join('\n\n---\n\n');
+                        const mergedContent = chunk
+                            .map(doc => `## ${doc.name}\n\n${doc.content}`)
+                            .join('\n\n---\n\n');
 
-                    const partFileName = `part_${index + 1}.md`;
-                    const filePath = dir ? `${dir}/${partFileName}` : partFileName;
-                    rootFolder.file(filePath, mergedContent);
+                        const partFileName = changeFileNameExtension(`part_${index + 1}.md`);
+                        const filePath = dir ? `${dir}/${partFileName}` : partFileName;
+                        rootFolder.file(filePath, mergedContent);
                     });
                 }
             }
         } else {
           for (const doc of docsToExport) {
             const fileContent = `## ${doc.name}\n[Source: ${doc.url}]\n\n${doc.content}`;
-            const filePath = zipExportMode === 'flat' ? doc.path.replace(/\//g, '_') : doc.path;
-            rootFolder.file(filePath, fileContent);
+            const originalFilePath = zipExportMode === 'flat' ? doc.path.replace(/\//g, '_') : doc.path;
+            const finalFilePath = changeFileNameExtension(originalFilePath);
+            rootFolder.file(finalFilePath, fileContent);
           }
         }
         const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -429,7 +460,7 @@ const App: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [selectedDocPaths, selectedDocuments, documents, exportType, repoName, mergeInZip, filesPerMergedFile, zipExportMode]);
+  }, [selectedDocPaths, selectedDocuments, documents, exportType, repoName, mergeInZip, filesPerMergedFile, zipExportMode, changeExtension, newExtension]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -772,6 +803,10 @@ const App: React.FC = () => {
                         setFilesPerMergedFile={setFilesPerMergedFile}
                         zipExportMode={zipExportMode}
                         setZipExportMode={setZipExportMode}
+                        changeExtension={changeExtension}
+                        setChangeExtension={setChangeExtension}
+                        newExtension={newExtension}
+                        setNewExtension={setNewExtension}
                       />
                     </div>
                   </div>
